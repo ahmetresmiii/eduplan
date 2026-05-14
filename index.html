@@ -1,432 +1,603 @@
-```html
-<!DOCTYPE html>
-<html lang="tr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduPlan - Hepsi Bir Arada Eğitim Platformu</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
-        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
-        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
-        .loader { border-top-color: #6366f1; animation: spinner 1.5s linear infinite; }
-        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
-</head>
-<body class="text-slate-800">
+```react
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  signOut, 
+  signInWithEmailAndPassword, 
+  createUserWithEmailAndPassword,
+  signInWithCustomToken,
+  signInAnonymously
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  onSnapshot, 
+  query, 
+  where, 
+  deleteDoc, 
+  doc, 
+  updateDoc 
+} from 'firebase/firestore';
+import { 
+  BookOpen, 
+  Clock, 
+  Calendar, 
+  BarChart2, 
+  Target, 
+  LogOut, 
+  Plus, 
+  Trash2, 
+  CheckCircle, 
+  Download, 
+  Moon, 
+  Sun,
+  Award,
+  Bell,
+  Layout,
+  ChevronRight,
+  Mail,
+  Lock,
+  User
+} from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
-    <!-- Auth Ekranı -->
-    <div id="auth-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-50 p-4">
-        <div class="max-w-md w-full glass p-8 rounded-3xl shadow-2xl space-y-6">
-            <div class="text-center">
-                <div class="flex justify-center mb-4">
-                    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-600 bg-indigo-50 p-3 rounded-2xl">
-                        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
-                        <path d="M8 7h6"></path>
-                        <path d="M8 11h8"></path>
-                    </svg>
-                </div>
-                <h1 class="text-3xl font-extrabold text-slate-900">EduPlan</h1>
-                <p class="text-slate-500 mt-2">Öğrenme sürecini modernize et</p>
-            </div>
+// Firebase Yapılandırması
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'edu-plan-pro';
 
-            <div class="space-y-4">
-                <!-- E-posta Formu -->
-                <div class="space-y-3">
-                    <input id="email-input" type="email" placeholder="E-posta Adresiniz" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all">
-                    <input id="password-input" type="password" placeholder="Şifreniz" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all">
-                    <div class="flex gap-2">
-                        <button onclick="handleEmailLogin()" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200">Giriş Yap</button>
-                        <button onclick="handleEmailSignUp()" class="flex-1 bg-white text-indigo-600 border-2 border-indigo-600 py-3 rounded-xl font-semibold hover:bg-indigo-50 transition-all">Kayıt Ol</button>
-                    </div>
-                </div>
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [outcomes, setOutcomes] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [exams, setExams] = useState([]);
+  const [schedule, setSchedule] = useState({});
+  const [darkMode, setDarkMode] = useState(false);
+  const [loading, setLoading] = useState(true);
 
-                <div class="relative flex py-3 items-center">
-                    <div class="flex-grow border-t border-slate-200"></div>
-                    <span class="flex-shrink mx-4 text-slate-400 text-sm">veya</span>
-                    <div class="flex-grow border-t border-slate-200"></div>
-                </div>
+  // Auth İşlemleri
+  useEffect(() => {
+    const initAuth = async () => {
+      if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+        try {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } catch {
+          await signInAnonymously(auth);
+        }
+      } else {
+        // Oturum açılmamışsa bekle, UI login formunu gösterecek
+      }
+    };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
-                <!-- Google Butonu -->
-                <button id="google-login-btn" onclick="handleGoogleLogin()" class="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 py-3 rounded-xl font-medium hover:bg-slate-50 transition-all">
-                    <svg width="20" height="20" viewBox="0 0 48 48">
-                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
-                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
-                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"></path>
-                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
-                    </svg>
-                    Google ile Devam Et
-                </button>
-            </div>
-            
-            <p id="auth-error" class="text-red-500 text-sm text-center hidden"></p>
+  // Veri Dinleme
+  useEffect(() => {
+    if (!user) return;
+
+    const outcomesSub = onSnapshot(
+      query(collection(db, 'artifacts', appId, 'users', user.uid, 'outcomes')),
+      (s) => setOutcomes(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (e) => console.error(e)
+    );
+
+    const tasksSub = onSnapshot(
+      query(collection(db, 'artifacts', appId, 'users', user.uid, 'tasks')),
+      (s) => setTasks(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (e) => console.error(e)
+    );
+
+    const examsSub = onSnapshot(
+      query(collection(db, 'artifacts', appId, 'users', user.uid, 'exams')),
+      (s) => setExams(s.docs.map(d => ({ id: d.id, ...d.data() }))),
+      (e) => console.error(e)
+    );
+
+    const scheduleSub = onSnapshot(
+      doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'schedule'),
+      (s) => setSchedule(s.exists() ? s.data().data : {}),
+      (e) => console.error(e)
+    );
+
+    return () => {
+      outcomesSub();
+      tasksSub();
+      examsSub();
+      scheduleSub();
+    };
+  }, [user]);
+
+  if (loading) return <div className="h-screen w-full flex items-center justify-center bg-slate-50"><div className="animate-spin rounded-full h-12 w-12 border-t-2 border-indigo-600"></div></div>;
+
+  if (!user) return <AuthScreen />;
+
+  return (
+    <div className={`min-h-screen flex ${darkMode ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'}`}>
+      {/* Sidebar */}
+      <aside className={`w-20 lg:w-64 border-r ${darkMode ? 'border-slate-800 bg-slate-900' : 'border-slate-200 bg-white'} flex flex-col transition-all duration-300`}>
+        <div className="p-6 flex items-center gap-3">
+          <div className="bg-indigo-600 p-2 rounded-xl text-white">
+            <BookOpen size={24} />
+          </div>
+          <span className="hidden lg:block font-bold text-xl tracking-tight">EduPlan <span className="text-indigo-600">Pro</span></span>
         </div>
-    </div>
 
-    <!-- Ana Uygulama -->
-    <div id="app-content" class="hidden min-h-screen flex">
+        <nav className="flex-1 px-3 space-y-1">
+          <NavItem active={activeTab === 'dashboard'} icon={<Layout size={20}/>} label="Panel" onClick={() => setActiveTab('dashboard')} />
+          <NavItem active={activeTab === 'schedule'} icon={<Calendar size={20}/>} label="Ders Programı" onClick={() => setActiveTab('schedule')} />
+          <NavItem active={activeTab === 'outcomes'} icon={<Target size={20}/>} label="Kazanımlar" onClick={() => setActiveTab('outcomes')} />
+          <NavItem active={activeTab === 'exams'} icon={<BarChart2 size={20}/>} label="Sınav Analizi" onClick={() => setActiveTab('exams')} />
+          <NavItem active={activeTab === 'timer'} icon={<Clock size={20}/>} label="Odaklanma" onClick={() => setActiveTab('timer')} />
+        </nav>
+
+        <div className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
+          <button onClick={() => setDarkMode(!darkMode)} className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
+            {darkMode ? <Sun size={20} className="text-yellow-400" /> : <Moon size={20} className="text-slate-500" />}
+            <span className="hidden lg:block text-sm font-medium">{darkMode ? 'Aydınlık' : 'Karanlık'} Mod</span>
+          </button>
+          <button onClick={() => signOut(auth)} className="w-full flex items-center gap-3 p-3 rounded-xl text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+            <LogOut size={20} />
+            <span className="hidden lg:block text-sm font-medium">Çıkış Yap</span>
+          </button>
+        </div>
+      </aside>
+
+      {/* Main Content */}
+      <main className="flex-1 overflow-y-auto custom-scrollbar p-4 lg:p-8">
+        <header className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-2xl font-bold">Hoş geldin, {user.displayName || user.email.split('@')[0]} 👋</h1>
+            <p className="text-slate-500 text-sm">Bugün senin için harika bir öğrenme günü.</p>
+          </div>
+          <div className="flex gap-3">
+             <div className="hidden sm:flex items-center gap-2 bg-indigo-50 dark:bg-indigo-900/30 px-4 py-2 rounded-2xl text-indigo-600 dark:text-indigo-400 font-semibold border border-indigo-100 dark:border-indigo-800">
+               <Award size={18} />
+               <span>Seviye 12 (Bronz)</span>
+             </div>
+          </div>
+        </header>
+
+        {activeTab === 'dashboard' && <Dashboard outcomes={outcomes} tasks={tasks} exams={exams} />}
+        {activeTab === 'schedule' && <Schedule schedule={schedule} setSchedule={setSchedule} user={user} darkMode={darkMode} />}
+        {activeTab === 'outcomes' && <Outcomes outcomes={outcomes} user={user} darkMode={darkMode} />}
+        {activeTab === 'exams' && <Exams exams={exams} user={user} darkMode={darkMode} />}
+        {activeTab === 'timer' && <Timer darkMode={darkMode} />}
+      </main>
+    </div>
+  );
+}
+
+// --- Alt Bileşenler ---
+
+function NavItem({ active, icon, label, onClick }) {
+  return (
+    <button 
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 p-3 lg:px-4 rounded-xl transition-all duration-200 ${active ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-200 dark:shadow-none' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`}
+    >
+      {icon}
+      <span className="hidden lg:block font-medium text-sm">{label}</span>
+    </button>
+  );
+}
+
+function Dashboard({ outcomes, tasks, exams }) {
+  const incompleteOutcomes = outcomes.filter(o => o.status === 'eksik').length;
+  const recentExams = [...exams].sort((a,b) => b.date - a.date).slice(0, 3);
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <StatCard color="blue" label="Eksik Kazanım" value={incompleteOutcomes} icon={<Target size={20}/>} />
+          <StatCard color="indigo" label="Sınav Ortalaması" value={exams.length ? (exams.reduce((a,b) => a + Number(b.score), 0) / exams.length).toFixed(1) : 0} icon={<BarChart2 size={20}/>} />
+          <StatCard color="green" label="Görevler" value={tasks.filter(t => !t.completed).length} icon={<CheckCircle size={20}/>} />
+        </div>
         
-        <!-- Sidebar -->
-        <aside class="w-64 glass hidden md:flex flex-col fixed h-full z-40">
-            <div class="p-6">
-                <div class="flex items-center gap-3 mb-10">
-                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-600">
-                        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
-                    </svg>
-                    <span class="text-xl font-bold tracking-tight">EduPlan</span>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+          <h3 className="font-bold text-lg mb-4">Haftalık İlerleme</h3>
+          <div className="h-48 flex items-end justify-between gap-2 px-2">
+            {[40, 70, 45, 90, 65, 30, 80].map((h, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-2">
+                <div style={{height: `${h}%`}} className="w-full max-w-[40px] bg-indigo-500/20 hover:bg-indigo-500 rounded-t-lg transition-all cursor-pointer relative group">
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity">%{h}</div>
                 </div>
-                <nav class="space-y-2">
-                    <button onclick="showPage('outcomes')" class="w-full flex items-center gap-3 px-4 py-3 text-indigo-600 bg-indigo-50 rounded-xl font-medium transition-all">
-                        <span>🎯 Kazanımlar</span>
-                    </button>
-                    <button onclick="showPage('timer')" class="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-all">
-                        <span>⏱️ Zamanlayıcı</span>
-                    </button>
-                    <button onclick="showPage('schedule')" class="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-all">
-                        <span>📅 Program</span>
-                    </button>
-                </nav>
-            </div>
-            <div class="mt-auto p-6 border-t border-slate-100">
-                <div id="user-info" class="flex items-center gap-3 mb-4">
-                    <div id="user-avatar" class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold uppercase"></div>
-                    <div class="flex flex-col">
-                        <span id="user-name" class="text-sm font-semibold truncate max-w-[120px]">Kullanıcı</span>
-                        <button onclick="logout()" class="text-xs text-red-500 hover:underline text-left">Çıkış Yap</button>
-                    </div>
-                </div>
-            </div>
-        </aside>
+                <span className="text-xs text-slate-400">G{i+1}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
 
-        <!-- Main Body -->
-        <main class="flex-1 md:ml-64 p-4 md:p-8">
-            
-            <!-- Kazanımlar Sayfası -->
-            <section id="page-outcomes" class="page-section space-y-6">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h2 class="text-2xl font-bold text-slate-900">Kazanım Takibi</h2>
-                        <p class="text-slate-500">Ders bazlı eksiklerini planla ve yönet.</p>
-                    </div>
-                    <button onclick="downloadOutcomesPDF()" class="bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2">
-                        📥 Eksikleri PDF İndir
-                    </button>
+      <div className="space-y-6">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm">
+          <h3 className="font-bold text-lg mb-4">Son Sınavlar</h3>
+          <div className="space-y-3">
+            {recentExams.map((ex, i) => (
+              <div key={i} className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-900 rounded-2xl">
+                <div>
+                  <p className="font-bold text-sm">{ex.title}</p>
+                  <p className="text-xs text-slate-500">{new Date(ex.date).toLocaleDateString('tr-TR')}</p>
                 </div>
+                <span className="font-black text-indigo-600">{ex.score}</span>
+              </div>
+            ))}
+            {!recentExams.length && <p className="text-sm text-slate-400 text-center py-4">Henüz sınav eklenmemiş.</p>}
+          </div>
+        </div>
 
-                <!-- Kazanım Ekleme -->
-                <div class="glass p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-3">
-                    <select id="outcome-subject" class="bg-white border border-slate-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
-                        <option value="Matematik">Matematik</option>
-                        <option value="Türkçe">Türkçe</option>
-                        <option value="Fen Bilimleri">Fen Bilimleri</option>
-                        <option value="Sosyal Bilgiler">Sosyal Bilgiler</option>
-                        <option value="İngilizce">İngilizce</option>
-                        <option value="Diğer">Diğer</option>
-                    </select>
-                    <input id="outcome-text" type="text" placeholder="Eksik olduğunuz kazanımı yazın..." class="flex-1 bg-white border border-slate-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
-                    <button onclick="addOutcome()" class="bg-slate-900 text-white px-8 py-3 rounded-xl font-medium hover:bg-slate-800 transition-all">Ekle</button>
-                </div>
-
-                <!-- Kazanım Listesi -->
-                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="outcomes-list">
-                    <!-- Dinamik yüklenecek -->
-                </div>
-            </section>
-
-            <!-- Zamanlayıcı Sayfası -->
-            <section id="page-timer" class="page-section hidden space-y-6">
-                <div class="text-center py-12">
-                    <h2 class="text-4xl font-black text-indigo-600 mb-2">Pomodoro</h2>
-                    <p class="text-slate-500">25 dakika odaklan, 5 dakika dinlen.</p>
-                </div>
-                <div class="max-w-md mx-auto glass p-10 rounded-[3rem] text-center shadow-xl">
-                    <div id="timer-display" class="text-7xl font-mono font-bold text-slate-800 mb-8 tracking-tighter">25:00</div>
-                    <div class="flex justify-center gap-4">
-                        <button id="timer-btn" onclick="toggleTimer()" class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">Başlat</button>
-                        <button onclick="resetTimer()" class="bg-slate-100 text-slate-600 px-10 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all">Sıfırla</button>
-                    </div>
-                </div>
-            </section>
-
-            <!-- Program Sayfası -->
-            <section id="page-schedule" class="page-section hidden space-y-6">
-                <h2 class="text-2xl font-bold">Haftalık Program</h2>
-                <div class="overflow-x-auto glass rounded-2xl">
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="bg-slate-50">
-                                <th class="p-4 border-b border-slate-200">Saat</th>
-                                <th class="p-4 border-b border-slate-200">Pzt</th>
-                                <th class="p-4 border-b border-slate-200">Sal</th>
-                                <th class="p-4 border-b border-slate-200">Çar</th>
-                                <th class="p-4 border-b border-slate-200">Per</th>
-                                <th class="p-4 border-b border-slate-200">Cum</th>
-                            </tr>
-                        </thead>
-                        <tbody id="schedule-body">
-                            <!-- JS ile dolacak -->
-                        </tbody>
-                    </table>
-                </div>
-            </section>
-
-        </main>
+        <div className="bg-indigo-600 p-6 rounded-3xl text-white shadow-xl shadow-indigo-200 dark:shadow-none">
+          <h3 className="font-bold text-lg mb-2">Yapay Zeka Önerisi</h3>
+          <p className="text-sm text-indigo-100 leading-relaxed">
+            Analizlerime göre Matematik - Fonksiyonlar konusunda eksiklerin var. Bugün 30 dakikalık bir tekrar harika olurdu!
+          </p>
+          <button className="mt-4 w-full py-2 bg-white text-indigo-600 rounded-xl font-bold text-sm hover:bg-indigo-50 transition-all">Hemen Başla</button>
+        </div>
+      </div>
     </div>
+  );
+}
 
-    <!-- Firebase -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, where, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+function StatCard({ color, label, value, icon }) {
+  const colors = {
+    blue: 'bg-blue-50 text-blue-600 border-blue-100',
+    indigo: 'bg-indigo-50 text-indigo-600 border-indigo-100',
+    green: 'bg-green-50 text-green-600 border-green-100'
+  };
+  return (
+    <div className={`p-5 rounded-3xl border ${colors[color]} dark:bg-slate-800 dark:border-slate-700`}>
+      <div className="flex items-center justify-between mb-2">
+        <div className="p-2 bg-white dark:bg-slate-900 rounded-lg">{icon}</div>
+        <span className="text-2xl font-black">{value}</span>
+      </div>
+      <p className="text-xs font-bold uppercase tracking-wider opacity-60">{label}</p>
+    </div>
+  );
+}
 
-        const firebaseConfig = {
-            apiKey: "AIzaSyDAticRTzXdnFKzi4okPm1TIoqrf27QAuQ",
-            authDomain: "appl-6eb7f.firebaseapp.com",
-            projectId: "appl-6eb7f",
-            storageBucket: "appl-6eb7f.firebasestorage.app",
-            messagingSenderId: "1088954713905",
-            appId: "1:1088954713905:web:81603ac97b6432e2add210"
-        };
+function Schedule({ schedule, setSchedule, user, darkMode }) {
+  const days = ['Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi', 'Pazar'];
+  const times = ['08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00', '16:00', '17:00', '18:00', '19:00', '20:00'];
 
-        const app = initializeApp(firebaseConfig);
-        const auth = getAuth(app);
-        const db = getFirestore(app);
-        const provider = new GoogleAuthProvider();
+  const handleUpdate = async (day, time, value) => {
+    const newSchedule = { ...schedule, [`${day}-${time}`]: value };
+    setSchedule(newSchedule);
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'settings', 'schedule'), { data: newSchedule });
+  };
 
-        let userOutcomes = [];
-        let currentUser = null;
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Haftalık Planlayıcı</h2>
+        <p className="text-sm text-slate-500">Derslerini saatlere göre yerleştir.</p>
+      </div>
+      <div className="overflow-x-auto rounded-3xl border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+        <table className="w-full border-collapse">
+          <thead>
+            <tr className="bg-slate-50 dark:bg-slate-800">
+              <th className="p-4 border-r border-b dark:border-slate-700 text-left text-xs font-bold text-slate-400">SAAT</th>
+              {days.map(d => (
+                <th key={d} className="p-4 border-b dark:border-slate-700 text-left text-xs font-bold text-slate-500">{d.toUpperCase()}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {times.map(t => (
+              <tr key={t}>
+                <td className="p-4 border-r dark:border-slate-800 text-xs font-bold text-slate-400 bg-slate-50/50 dark:bg-slate-900">{t}</td>
+                {days.map(d => (
+                  <td key={d} className="p-2 border-r border-b dark:border-slate-800 min-w-[120px]">
+                    <input 
+                      value={schedule[`${d}-${t}`] || ''}
+                      onChange={(e) => handleUpdate(d, t, e.target.value)}
+                      placeholder="+"
+                      className="w-full p-2 text-sm bg-transparent border-none focus:ring-2 focus:ring-indigo-500 rounded-lg placeholder-slate-300 transition-all"
+                    />
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
 
-        // Auth İşlemleri
-        window.handleGoogleLogin = async () => {
-            try {
-                const res = await signInWithPopup(auth, provider);
-            } catch (err) {
-                console.error(err);
-                showAuthError("Google bağlantısı başarısız. Lütfen tekrar deneyin veya e-posta kullanın.");
-            }
-        };
+function Outcomes({ outcomes, user, darkMode }) {
+  const [newSubject, setNewSubject] = useState('Matematik');
+  const [newText, setNewText] = useState('');
 
-        window.handleEmailLogin = async () => {
-            const email = document.getElementById('email-input').value;
-            const pass = document.getElementById('password-input').value;
-            if(!email || !pass) return showAuthError("Lütfen alanları doldurun.");
-            try {
-                await signInWithEmailAndPassword(auth, email, pass);
-            } catch (err) {
-                showAuthError("Giriş yapılamadı: " + translateError(err.code));
-            }
-        };
+  const add = async () => {
+    if (!newText.trim()) return;
+    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'outcomes'), {
+      subject: newSubject,
+      text: newText,
+      status: 'eksik',
+      date: Date.now()
+    });
+    setNewText('');
+  };
 
-        window.handleEmailSignUp = async () => {
-            const email = document.getElementById('email-input').value;
-            const pass = document.getElementById('password-input').value;
-            if(!email || pass.length < 6) return showAuthError("E-posta geçerli, şifre en az 6 karakter olmalıdır.");
-            try {
-                await createUserWithEmailAndPassword(auth, email, pass);
-            } catch (err) {
-                showAuthError("Kayıt olunamadı: " + translateError(err.code));
-            }
-        };
+  const toggle = async (item) => {
+    await updateDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'outcomes', item.id), {
+      status: item.status === 'eksik' ? 'tamamlandi' : 'eksik'
+    });
+  };
 
-        function translateError(code) {
-            switch(code) {
-                case 'auth/invalid-credential': return "Hatalı e-posta veya şifre.";
-                case 'auth/email-already-in-use': return "Bu e-posta zaten kullanımda.";
-                case 'auth/weak-password': return "Şifre çok zayıf.";
-                default: return "Bir hata oluştu.";
-            }
+  const downloadPDF = () => {
+    const doc = new jsPDF();
+    doc.setFontSize(22);
+    doc.text("EduPlan - Eksik Kazanim Raporu", 14, 20);
+    doc.setFontSize(10);
+    doc.text(`Tarih: ${new Date().toLocaleDateString('tr-TR')}`, 14, 30);
+
+    const rows = outcomes
+      .filter(o => o.status === 'eksik')
+      .map(o => [o.subject, o.text]);
+
+    doc.autoTable({
+      startY: 35,
+      head: [['Ders', 'Kazanim Tanimi']],
+      body: rows,
+      headStyles: { fillColor: [79, 70, 229] },
+      styles: { font: "helvetica" }
+    });
+    doc.save("EduPlan_Eksik_Kazanimlar.pdf");
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <h2 className="text-2xl font-bold">Müfredat Takibi</h2>
+        <button onClick={downloadPDF} className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-2xl font-bold shadow-lg shadow-indigo-200 dark:shadow-none hover:scale-105 transition-transform">
+          <Download size={18}/> Eksikleri İndir (PDF)
+        </button>
+      </div>
+
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row gap-4">
+        <select value={newSubject} onChange={(e) => setNewSubject(e.target.value)} className="bg-slate-50 dark:bg-slate-900 border-none px-4 py-3 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium">
+          <option>Matematik</option><option>Türkçe</option><option>Fen</option><option>Sosyal</option><option>İngilizce</option>
+        </select>
+        <input 
+          placeholder="Hangi kazanımı ekleyeceksin?" 
+          value={newText}
+          onChange={(e) => setNewText(e.target.value)}
+          className="flex-1 bg-slate-50 dark:bg-slate-900 border-none px-4 py-3 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500"
+        />
+        <button onClick={add} className="bg-slate-900 dark:bg-indigo-600 text-white px-8 py-3 rounded-2xl font-bold hover:opacity-90 transition-opacity">Ekle</button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {outcomes.map(item => (
+          <div key={item.id} className={`p-5 rounded-3xl border ${item.status === 'tamamlandi' ? 'bg-green-50/50 border-green-100 opacity-60 dark:bg-green-900/10 dark:border-green-900/30' : 'bg-white border-slate-100 dark:bg-slate-800 dark:border-slate-700'} transition-all`}>
+            <div className="flex justify-between mb-3">
+              <span className="text-xs font-black uppercase px-2 py-1 bg-slate-100 dark:bg-slate-900 rounded-lg text-slate-500">{item.subject}</span>
+              <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'outcomes', item.id))} className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
+            </div>
+            <p className={`font-semibold mb-4 ${item.status === 'tamamlandi' ? 'line-through text-slate-400' : ''}`}>{item.text}</p>
+            <button onClick={() => toggle(item)} className={`w-full py-2.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-colors ${item.status === 'tamamlandi' ? 'bg-green-500 text-white' : 'bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'}`}>
+              {item.status === 'tamamlandi' ? <CheckCircle size={18}/> : null}
+              {item.status === 'tamamlandi' ? 'Tamamlandı' : 'Tamamla'}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Exams({ exams, user, darkMode }) {
+  const [title, setTitle] = useState('');
+  const [score, setScore] = useState('');
+
+  const add = async () => {
+    if (!title || !score) return;
+    await addDoc(collection(db, 'artifacts', appId, 'users', user.uid, 'exams'), {
+      title, score, date: Date.now()
+    });
+    setTitle(''); setScore('');
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-2xl font-bold">Sınav Analizleri</h2>
+      <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col sm:flex-row gap-4">
+        <input placeholder="Sınav Adı (örn: LGS Deneme 1)" value={title} onChange={e => setTitle(e.target.value)} className="flex-1 bg-slate-50 dark:bg-slate-900 border-none px-4 py-3 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500"/>
+        <input type="number" placeholder="Puan/Net" value={score} onChange={e => setScore(e.target.value)} className="w-full sm:w-32 bg-slate-50 dark:bg-slate-900 border-none px-4 py-3 rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500"/>
+        <button onClick={add} className="bg-slate-900 dark:bg-indigo-600 text-white px-8 py-3 rounded-2xl font-bold">Kaydet</button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border dark:border-slate-700">
+          <h3 className="font-bold mb-4">Puan Grafiği</h3>
+          <div className="h-40 flex items-end gap-2">
+            {exams.map((ex, i) => (
+              <div key={i} className="flex-1 bg-indigo-500 rounded-t-lg relative group" style={{height: `${(ex.score / 500) * 100}%`}}>
+                <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-slate-800 text-white text-[10px] px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap">{ex.title}: {ex.score}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-3 overflow-y-auto max-h-[300px] custom-scrollbar">
+          {exams.sort((a,b) => b.date - a.date).map(ex => (
+            <div key={ex.id} className="p-4 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 flex justify-between items-center">
+              <div>
+                <p className="font-bold">{ex.title}</p>
+                <p className="text-xs text-slate-400">{new Date(ex.date).toLocaleDateString('tr-TR')}</p>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="text-xl font-black text-indigo-600">{ex.score}</span>
+                <button onClick={() => deleteDoc(doc(db, 'artifacts', appId, 'users', user.uid, 'exams', ex.id))} className="text-slate-300 hover:text-red-500"><Trash2 size={16}/></button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Timer({ darkMode }) {
+  const [minutes, setMinutes] = useState(25);
+  const [seconds, setSeconds] = useState(0);
+  const [isActive, setIsActive] = useState(false);
+  const [customInput, setCustomInput] = useState('60');
+
+  useEffect(() => {
+    let interval = null;
+    if (isActive && (minutes > 0 || seconds > 0)) {
+      interval = setInterval(() => {
+        if (seconds === 0) {
+          setMinutes(minutes - 1);
+          setSeconds(59);
+        } else {
+          setSeconds(seconds - 1);
         }
+      }, 1000);
+    } else if (minutes === 0 && seconds === 0) {
+      setIsActive(false);
+      clearInterval(interval);
+    }
+    return () => clearInterval(interval);
+  }, [isActive, minutes, seconds]);
 
-        function showAuthError(msg) {
-            const err = document.getElementById('auth-error');
-            err.innerText = msg;
-            err.classList.remove('hidden');
-        }
+  const setCustomTime = () => {
+    const mins = parseInt(customInput);
+    if (!isNaN(mins) && mins > 0) {
+      setMinutes(mins);
+      setSeconds(0);
+      setIsActive(false);
+    }
+  };
 
-        window.logout = () => signOut(auth);
+  return (
+    <div className="flex flex-col items-center justify-center py-12 space-y-8">
+      <div className="text-center">
+        <h2 className="text-3xl font-black text-indigo-600 mb-2">Odaklanma Sayacı</h2>
+        <p className="text-slate-500">Zamanını verimli kullan, başarıya odaklan.</p>
+      </div>
 
-        onAuthStateChanged(auth, (user) => {
-            if (user) {
-                currentUser = user;
-                document.getElementById('auth-screen').classList.add('hidden');
-                document.getElementById('app-content').classList.remove('hidden');
-                document.getElementById('user-name').innerText = user.displayName || user.email.split('@')[0];
-                document.getElementById('user-avatar').innerText = (user.displayName || user.email).charAt(0);
-                loadData();
-            } else {
-                document.getElementById('auth-screen').classList.remove('hidden');
-                document.getElementById('app-content').classList.add('hidden');
-            }
-        });
+      <div className="relative group">
+        <div className="absolute -inset-4 bg-indigo-500/20 rounded-full blur-2xl group-hover:bg-indigo-500/30 transition-all"></div>
+        <div className={`relative w-72 h-72 rounded-full border-[12px] ${isActive ? 'border-indigo-600' : 'border-slate-200 dark:border-slate-800'} flex flex-col items-center justify-center bg-white dark:bg-slate-900 shadow-2xl transition-all`}>
+          <span className="text-6xl font-mono font-black tracking-tighter">
+            {String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}
+          </span>
+          <span className="text-xs font-bold text-slate-400 mt-2 uppercase tracking-widest">{isActive ? 'ÇALIŞIYOR' : 'HAZIR'}</span>
+        </div>
+      </div>
 
-        // Veri Yükleme
-        function loadData() {
-            const q = query(
-                collection(db, "outcomes"), 
-                where("userId", "==", currentUser.uid)
-            );
-            
-            onSnapshot(q, (snapshot) => {
-                userOutcomes = [];
-                snapshot.forEach(doc => userOutcomes.push({ id: doc.id, ...doc.data() }));
-                renderOutcomes();
-            });
-        }
+      <div className="flex flex-col items-center gap-6 w-full max-w-sm">
+        <div className="flex gap-3 w-full">
+          <button onClick={() => setIsActive(!isActive)} className={`flex-1 py-4 rounded-2xl font-bold text-white shadow-lg transition-all ${isActive ? 'bg-red-500 shadow-red-200' : 'bg-indigo-600 shadow-indigo-200 dark:shadow-none'} hover:scale-105 active:scale-95`}>
+            {isActive ? 'Durdur' : 'Başlat'}
+          </button>
+          <button onClick={() => { setIsActive(false); setMinutes(25); setSeconds(0); }} className="px-6 py-4 rounded-2xl bg-slate-100 dark:bg-slate-800 font-bold hover:bg-slate-200 transition-all">Sıfırla</button>
+        </div>
 
-        window.addOutcome = async () => {
-            const subject = document.getElementById('outcome-subject').value;
-            const text = document.getElementById('outcome-text').value;
-            if (!text) return;
-            
-            await addDoc(collection(db, "outcomes"), {
-                userId: currentUser.uid,
-                subject,
-                text,
-                status: 'eksik',
-                createdAt: Date.now()
-            });
-            document.getElementById('outcome-text').value = '';
-        };
+        <div className="w-full flex gap-2 p-2 bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-sm">
+          <input 
+            type="number" 
+            value={customInput}
+            onChange={e => setCustomInput(e.target.value)}
+            className="flex-1 bg-transparent border-none px-4 outline-none font-bold text-center"
+            placeholder="Dakika"
+          />
+          <button onClick={setCustomTime} className="bg-slate-900 dark:bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold text-sm">Süre Ayarla</button>
+        </div>
+      </div>
 
-        window.deleteOutcome = async (id) => {
-            await deleteDoc(doc(db, "outcomes", id));
-        };
+      <div className="flex gap-4">
+        <button onClick={() => { setMinutes(25); setSeconds(0); setIsActive(false); }} className="text-sm font-bold text-slate-400 hover:text-indigo-600 transition-colors underline underline-offset-8">Pomodoro (25dk)</button>
+        <button onClick={() => { setMinutes(50); setSeconds(0); setIsActive(false); }} className="text-sm font-bold text-slate-400 hover:text-indigo-600 transition-colors underline underline-offset-8">Blok (50dk)</button>
+      </div>
+    </div>
+  );
+}
 
-        window.toggleOutcomeStatus = async (id, currentStatus) => {
-            const nextStatus = currentStatus === 'eksik' ? 'tamamlandi' : 'eksik';
-            await updateDoc(doc(db, "outcomes", id), { status: nextStatus });
-        };
+function AuthScreen() {
+  const [mode, setMode] = useState('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
 
-        function renderOutcomes() {
-            const container = document.getElementById('outcomes-list');
-            container.innerHTML = '';
-            
-            userOutcomes.sort((a, b) => b.createdAt - a.createdAt).forEach(item => {
-                const isDone = item.status === 'tamamlandi';
-                const card = `
-                    <div class="glass p-5 rounded-2xl border-l-4 ${isDone ? 'border-green-500 opacity-60' : 'border-indigo-500'} transition-all">
-                        <div class="flex justify-between items-start mb-2">
-                            <span class="text-xs font-bold px-2 py-1 bg-slate-100 rounded-md text-slate-600">${item.subject}</span>
-                            <button onclick="deleteOutcome('${item.id}')" class="text-slate-300 hover:text-red-500">✕</button>
-                        </div>
-                        <p class="text-slate-700 font-medium mb-4 ${isDone ? 'line-through' : ''}">${item.text}</p>
-                        <button onclick="toggleOutcomeStatus('${item.id}', '${item.status}')" class="w-full py-2 rounded-lg text-sm font-semibold ${isDone ? 'bg-green-50 text-green-600' : 'bg-indigo-50 text-indigo-600'} hover:opacity-80">
-                            ${isDone ? '✓ Tamamlandı' : 'Tamamla'}
-                        </button>
-                    </div>
-                `;
-                container.innerHTML += card;
-            });
-        }
+  const handleGoogle = async () => {
+    try { await signInWithPopup(auth, new GoogleAuthProvider()); } catch (e) { setError('Google girişi başarısız.'); }
+  };
 
-        // PDF İndirme (UTF-8 Font Desteği için Standard Fontlar Kullanılır)
-        window.downloadOutcomesPDF = () => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
-            
-            // Başlık
-            doc.setFontSize(20);
-            doc.text("EduPlan - Eksik Kazanim Listesi", 14, 22);
-            
-            const rows = userOutcomes
-                .filter(i => i.status === 'eksik')
-                .map(i => [i.subject, i.text]);
+  const handleAuth = async (e) => {
+    e.preventDefault();
+    setError('');
+    try {
+      if (mode === 'login') await signInWithEmailAndPassword(auth, email, password);
+      else await createUserWithEmailAndPassword(auth, email, password);
+    } catch (e) { setError(e.code === 'auth/invalid-credential' ? 'Hatalı e-posta veya şifre.' : 'Bir hata oluştu.'); }
+  };
 
-            doc.autoTable({
-                startY: 30,
-                head: [['Ders', 'Kazanim']],
-                body: rows,
-                theme: 'striped',
-                styles: { font: "helvetica", fontSize: 10 },
-                headStyles: { fillColor: [99, 102, 241] }
-            });
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+      <div className="w-full max-w-md bg-white p-8 rounded-[2.5rem] shadow-2xl border border-slate-100">
+        <div className="text-center mb-10">
+          <div className="inline-block bg-indigo-600 p-4 rounded-3xl text-white mb-4 shadow-lg shadow-indigo-100">
+            <BookOpen size={40} />
+          </div>
+          <h1 className="text-4xl font-black text-slate-900 tracking-tighter">EduPlan <span className="text-indigo-600">Pro</span></h1>
+          <p className="text-slate-400 mt-2 font-medium">Akademik Başarı Yönetim Platformu</p>
+        </div>
 
-            doc.save("EduPlan_Eksik_Kazanımlar.pdf");
-        };
+        <form onSubmit={handleAuth} className="space-y-4">
+          <div className="space-y-2">
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+              <input type="email" placeholder="E-posta Adresi" value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium transition-all" required />
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+              <input type="password" placeholder="Şifre" value={password} onChange={e => setPassword(e.target.value)} className="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 font-medium transition-all" required />
+            </div>
+          </div>
 
-        // Navigation
-        window.showPage = (page) => {
-            document.querySelectorAll('.page-section').forEach(s => s.classList.add('hidden'));
-            document.getElementById(`page-${page}`).classList.remove('hidden');
-            
-            // Sidebar aktif link rengi
-            document.querySelectorAll('aside nav button').forEach(b => {
-                b.classList.remove('text-indigo-600', 'bg-indigo-50');
-                b.classList.add('text-slate-600');
-            });
-            event.currentTarget.classList.add('text-indigo-600', 'bg-indigo-50');
-        };
+          {error && <p className="text-red-500 text-xs font-bold text-center px-2">{error}</p>}
 
-        // Timer
-        let timer;
-        let timeLeft = 25 * 60;
-        let isRunning = false;
+          <button type="submit" className="w-full py-4 bg-slate-900 text-white rounded-2xl font-bold shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all active:scale-95">
+            {mode === 'login' ? 'Giriş Yap' : 'Kayıt Ol'}
+          </button>
+        </form>
 
-        window.toggleTimer = () => {
-            const btn = document.getElementById('timer-btn');
-            if (isRunning) {
-                clearInterval(timer);
-                btn.innerText = "Başlat";
-                btn.classList.replace('bg-red-500', 'bg-indigo-600');
-            } else {
-                timer = setInterval(() => {
-                    timeLeft--;
-                    updateTimerDisplay();
-                    if (timeLeft <= 0) {
-                        clearInterval(timer);
-                        alert("Süre bitti! Harika iş çıkardın.");
-                        resetTimer();
-                    }
-                }, 1000);
-                btn.innerText = "Durdur";
-                btn.classList.replace('bg-indigo-600', 'bg-red-500');
-            }
-            isRunning = !isRunning;
-        };
+        <div className="relative my-8">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-100"></div></div>
+          <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-4 text-slate-400 font-bold tracking-widest">veya</span></div>
+        </div>
 
-        window.resetTimer = () => {
-            clearInterval(timer);
-            isRunning = false;
-            timeLeft = 25 * 60;
-            updateTimerDisplay();
-            const btn = document.getElementById('timer-btn');
-            btn.innerText = "Başlat";
-            btn.classList.remove('bg-red-500');
-            btn.classList.add('bg-indigo-600');
-        };
+        <button onClick={handleGoogle} className="w-full py-4 bg-white border border-slate-100 rounded-2xl font-bold flex items-center justify-center gap-3 hover:bg-slate-50 transition-all">
+          <svg width="20" height="20" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"></path><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path></svg>
+          Google ile Devam Et
+        </button>
 
-        function updateTimerDisplay() {
-            const m = Math.floor(timeLeft / 60);
-            const s = timeLeft % 60;
-            document.getElementById('timer-display').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-        }
-
-        // Haftalık Program Oluşturucu
-        function initSchedule() {
-            const tbody = document.getElementById('schedule-body');
-            const hours = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"];
-            hours.forEach(hour => {
-                let row = `<tr class="border-b border-slate-100">
-                    <td class="p-4 font-semibold text-slate-400 text-sm">${hour}</td>
-                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
-                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
-                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
-                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
-                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
-                </tr>`;
-                tbody.innerHTML += row;
-            });
-        }
-        initSchedule();
-
-    </script>
-</body>
-</html>
+        <p className="mt-8 text-center text-sm font-medium text-slate-500">
+          {mode === 'login' ? 'Henüz hesabın yok mu?' : 'Zaten üye misin?'} 
+          <button onClick={() => setMode(mode === 'login' ? 'signup' : 'login')} className="ml-2 text-indigo-600 font-bold hover:underline">
+            {mode === 'login' ? 'Hemen Kayıt Ol' : 'Giriş Yap'}
+          </button>
+        </p>
+      </div>
+    </div>
+  );
+}
 
 ```
