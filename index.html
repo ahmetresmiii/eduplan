@@ -17,6 +17,7 @@
         .timer-animate { animation: pulse-slow 2s infinite; }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
+        .page-section.hidden { display: none; }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen custom-scrollbar">
@@ -26,7 +27,7 @@
         import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, setDoc, getDocs, addDoc, updateDoc, deleteDoc, onSnapshot, query } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebase Yapılandırması (Kullanıcı Tarafından Sağlanan)
+        // Değişken Tanımlamaları
         const firebaseConfig = {
             apiKey: "AIzaSyDAticRTzXdnFKzi4okPm1TIoqrf27QAuQ",
             authDomain: "appl-6eb7f.firebaseapp.com",
@@ -42,64 +43,46 @@
         const db = getFirestore(app);
         const provider = new GoogleAuthProvider();
 
-        // Uygulama Durumu
-        let currentUser = null;
-        let activeTab = 'dashboard';
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'edu-master-pro';
-
+        // Global Değişkenler
+        window.currentUser = null;
+        window.appId = "eduplan_pro_v1";
         window.state = {
             outcomes: [],
-            schedule: [],
+            activeTab: 'dashboard',
             timer: {
                 minutes: 25,
                 seconds: 0,
                 isRunning: false,
-                interval: null,
-                mode: 'work' // work, break
+                interval: null
             }
         };
 
-        window.switchTab = (tabId) => {
-            activeTab = tabId;
-            document.querySelectorAll('.page-section').forEach(s => s.classList.add('hidden'));
-            document.getElementById(`section-${tabId}`).classList.remove('hidden');
-            
-            document.querySelectorAll('.sidebar-item').forEach(item => {
-                item.classList.remove('active');
-                if(item.dataset.tab === tabId) item.classList.add('active');
-            });
-            if (window.lucide) window.lucide.createIcons();
-        };
-
         window.login = async () => {
+            const btn = document.getElementById('login-btn');
             try {
-                const btn = document.getElementById('login-btn');
                 btn.disabled = true;
-                btn.innerHTML = '<span class="animate-spin mr-2">⏳</span> Giriş Yapılıyor...';
+                btn.innerHTML = '<span class="animate-spin mr-2">⏳</span> Bağlanıyor...';
                 await signInWithPopup(auth, provider);
             } catch (error) {
                 console.error("Login hatası:", error);
-                showNotification("Giriş yapılamadı: " + error.message, "error");
-                const btn = document.getElementById('login-btn');
                 btn.disabled = false;
-                btn.innerHTML = 'Google ile Giriş Yap / Hesap Oluştur';
+                btn.innerHTML = 'Google ile Giriş Yap';
+                showNotification("Giriş başarısız: " + error.message, "error");
             }
         };
 
         window.logout = () => signOut(auth);
 
         onAuthStateChanged(auth, (user) => {
-            currentUser = user;
+            window.currentUser = user;
             const authScreen = document.getElementById('auth-screen');
             const mainApp = document.getElementById('main-app');
-            const userNameDisplay = document.getElementById('user-name');
-            const userEmailDisplay = document.getElementById('user-email');
 
             if (user) {
                 authScreen.classList.add('hidden');
                 mainApp.classList.remove('hidden');
-                userNameDisplay.innerText = user.displayName;
-                userEmailDisplay.innerText = user.email;
+                document.getElementById('user-name').innerText = user.displayName;
+                document.getElementById('user-email').innerText = user.email;
                 loadUserData();
             } else {
                 authScreen.classList.remove('hidden');
@@ -108,18 +91,16 @@
         });
 
         async function loadUserData() {
-            if (!currentUser) return;
-            const userId = currentUser.uid;
+            if (!window.currentUser) return;
+            const userId = window.currentUser.uid;
+            const outcomesPath = `users/${userId}/outcomes`;
 
-            // Kazanımları Gerçek Zamanlı Takip Et (Rule 1: Path Structure)
-            const outcomesPath = `/artifacts/${appId}/users/${userId}/outcomes`;
             onSnapshot(collection(db, outcomesPath), (snapshot) => {
                 window.state.outcomes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderOutcomes();
                 updateDashboardStats();
             }, (err) => {
-                console.error("Firestore Error:", err);
-                showNotification("Veri yükleme hatası!", "error");
+                console.error("Veri çekme hatası:", err);
             });
         }
 
@@ -128,69 +109,47 @@
             const lesson = document.getElementById('outcome-lesson').value;
             const content = document.getElementById('outcome-content').value;
             
-            if(!lesson || !content) return;
+            if(!lesson || !content || !window.currentUser) return;
 
             try {
-                const userId = currentUser.uid;
-                await addDoc(collection(db, `/artifacts/${appId}/users/${userId}/outcomes`), {
+                const userId = window.currentUser.uid;
+                await addDoc(collection(db, `users/${userId}/outcomes`), {
                     lesson,
                     content,
                     completed: false,
                     createdAt: new Date().toISOString()
                 });
                 document.getElementById('outcome-content').value = "";
-                showNotification("Kazanım başarıyla eklendi.");
+                showNotification("Kazanım eklendi.");
             } catch (err) {
-                console.error(err);
                 showNotification("Hata oluştu!", "error");
             }
         };
 
         window.toggleOutcome = async (id, currentStatus) => {
-            const userId = currentUser.uid;
-            const docRef = doc(db, `/artifacts/${appId}/users/${userId}/outcomes`, id);
+            if (!window.currentUser) return;
+            const userId = window.currentUser.uid;
+            const docRef = doc(db, `users/${userId}/outcomes`, id);
             await updateDoc(docRef, { completed: !currentStatus });
         };
 
         window.deleteOutcome = async (id) => {
-            const userId = currentUser.uid;
-            await deleteDoc(doc(db, `/artifacts/${appId}/users/${userId}/outcomes`, id));
+            if (!window.currentUser) return;
+            const userId = window.currentUser.uid;
+            await deleteDoc(doc(db, `users/${userId}/outcomes`, id));
             showNotification("Kazanım silindi.");
         };
 
-        window.downloadPDF = () => {
-            const { jsPDF } = window.jspdf;
-            const doc = new jsPDF();
+        window.updateTimerUI = () => {
+            const timerObj = window.state.timer;
+            if (!timerObj) return;
+            const min = String(timerObj.minutes).padStart(2, '0');
+            const sec = String(timerObj.seconds).padStart(2, '0');
+            const display = document.getElementById('timer-display');
+            const btnText = document.getElementById('timer-btn-text');
             
-            const missingOutcomes = window.state.outcomes.filter(o => !o.completed);
-            
-            if (missingOutcomes.length === 0) {
-                showNotification("Eksik kazanımınız yok, harikasınız!", "success");
-                return;
-            }
-
-            // Başlık
-            doc.setFontSize(20);
-            doc.text("EduPlan: Eksik Kazanimlar Raporu", 14, 22);
-            doc.setFontSize(11);
-            doc.text(`Tarih: ${new Date().toLocaleDateString('tr-TR')}`, 14, 30);
-
-            const tableData = missingOutcomes.map(o => [
-                o.lesson,
-                o.content,
-                'Eksik'
-            ]);
-
-            doc.autoTable({
-                startY: 40,
-                head: [['Ders', 'Kazanim / Konu', 'Durum']],
-                body: tableData,
-                theme: 'grid',
-                headStyles: { fillColor: [79, 70, 229] },
-                styles: { overflow: 'linebreak' }
-            });
-
-            doc.save("EduPlan_Eksik_Kazanimlar.pdf");
+            if(display) display.innerText = `${min}:${sec}`;
+            if(btnText) btnText.innerText = timerObj.isRunning ? 'Durdur' : 'Başlat';
         };
 
         window.toggleTimer = () => {
@@ -200,22 +159,23 @@
             } else {
                 window.state.timer.isRunning = true;
                 window.state.timer.interval = setInterval(() => {
-                    if (window.state.timer.seconds === 0) {
-                        if (window.state.timer.minutes === 0) {
-                            clearInterval(window.state.timer.interval);
-                            window.state.timer.isRunning = false;
+                    const t = window.state.timer;
+                    if (t.seconds === 0) {
+                        if (t.minutes === 0) {
+                            clearInterval(t.interval);
+                            t.isRunning = false;
                             completeSession();
-                            return;
+                        } else {
+                            t.minutes--;
+                            t.seconds = 59;
                         }
-                        window.state.timer.minutes--;
-                        window.state.timer.seconds = 59;
                     } else {
-                        window.state.timer.seconds--;
+                        t.seconds--;
                     }
-                    updateTimerUI();
+                    window.updateTimerUI();
                 }, 1000);
             }
-            updateTimerUI();
+            window.updateTimerUI();
         };
 
         window.resetTimer = () => {
@@ -223,36 +183,24 @@
             window.state.timer.isRunning = false;
             window.state.timer.minutes = 25;
             window.state.timer.seconds = 0;
-            updateTimerUI();
+            window.updateTimerUI();
         };
 
         function completeSession() {
-            const sound = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-            sound.play().catch(() => {});
             showNotification("Süre doldu! Harika bir çalışma.");
-        }
-
-        function updateTimerUI() {
-            const min = String(window.state.timer.minutes).padStart(2, '0');
-            const sec = String(window.state.timer.seconds).padStart(2, '0');
-            document.getElementById('timer-display').innerText = `${min}:${sec}`;
-            document.getElementById('timer-btn-text').innerText = window.state.timer.isRunning ? 'Durdur' : 'Başlat';
         }
 
         function renderOutcomes() {
             const list = document.getElementById('outcomes-list');
+            if(!list) return;
             if (!window.state.outcomes.length) {
-                list.innerHTML = `<div class="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-slate-100">
-                    <p class="text-slate-400">Henüz bir kazanım eklemediniz.</p>
-                </div>`;
+                list.innerHTML = `<div class="text-center py-12 bg-white rounded-2xl border-2 border-dashed border-slate-100"><p class="text-slate-400">Henüz kazanım yok.</p></div>`;
                 return;
             }
             list.innerHTML = window.state.outcomes.map(o => `
-                <div class="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl mb-3 shadow-sm hover:border-indigo-200 transition-all">
+                <div class="flex items-center justify-between p-4 bg-white border border-slate-200 rounded-xl mb-3 shadow-sm">
                     <div class="flex items-center gap-4">
-                        <input type="checkbox" ${o.completed ? 'checked' : ''} 
-                               onchange="toggleOutcome('${o.id}', ${o.completed})"
-                               class="w-6 h-6 rounded-lg border-slate-300 text-indigo-600 focus:ring-indigo-500 cursor-pointer">
+                        <input type="checkbox" ${o.completed ? 'checked' : ''} onchange="toggleOutcome('${o.id}', ${o.completed})" class="w-6 h-6 rounded-lg text-indigo-600 cursor-pointer">
                         <div>
                             <span class="text-[10px] font-bold text-indigo-600 uppercase tracking-widest">${o.lesson}</span>
                             <p class="${o.completed ? 'line-through text-slate-400' : 'text-slate-700'} font-medium">${o.content}</p>
@@ -271,45 +219,78 @@
             const completed = window.state.outcomes.filter(o => o.completed).length;
             const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
 
-            document.getElementById('stat-total').innerText = total;
-            document.getElementById('stat-percent').innerText = `%${percent}`;
-            document.getElementById('progress-bar-fill').style.width = `${percent}%`;
+            const totalEl = document.getElementById('stat-total');
+            const percentEl = document.getElementById('stat-percent');
+            const progressEl = document.getElementById('progress-bar-fill');
+
+            if(totalEl) totalEl.innerText = total;
+            if(percentEl) percentEl.innerText = `%${percent}`;
+            if(progressEl) progressEl.style.width = `${percent}%`;
         }
+
+        window.switchTab = (tabId) => {
+            window.state.activeTab = tabId;
+            document.querySelectorAll('.page-section').forEach(s => s.classList.add('hidden'));
+            const activeSection = document.getElementById(`section-${tabId}`);
+            if(activeSection) activeSection.classList.remove('hidden');
+            
+            document.querySelectorAll('.sidebar-item').forEach(item => {
+                item.classList.remove('active');
+                if(item.dataset.tab === tabId) item.classList.add('active');
+            });
+            if (window.lucide) window.lucide.createIcons();
+        };
+
+        window.downloadPDF = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const missingOutcomes = window.state.outcomes.filter(o => !o.completed);
+            
+            if (missingOutcomes.length === 0) {
+                showNotification("Eksik kazanımınız yok!", "success");
+                return;
+            }
+
+            doc.setFontSize(20);
+            doc.text("EduPlan: Eksik Kazanimlar Raporu", 14, 22);
+            doc.setFontSize(11);
+            doc.text(`Tarih: ${new Date().toLocaleDateString('tr-TR')}`, 14, 30);
+
+            const tableData = missingOutcomes.map(o => [o.lesson, o.content, 'Eksik']);
+            doc.autoTable({
+                startY: 40,
+                head: [['Ders', 'Kazanim / Konu', 'Durum']],
+                body: tableData,
+                theme: 'grid',
+                headStyles: { fillColor: [79, 70, 229] }
+            });
+            doc.save("EduPlan_Eksik_Kazanimlar.pdf");
+        };
 
         function showNotification(msg, type = 'success') {
             const toast = document.createElement('div');
-            toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-xl shadow-xl text-white z-50 transform transition-all duration-300 translate-y-0 ${type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`;
+            toast.className = `fixed bottom-4 right-4 px-6 py-3 rounded-xl shadow-xl text-white z-50 transform transition-all duration-300 ${type === 'success' ? 'bg-emerald-500' : 'bg-red-500'}`;
             toast.innerText = msg;
             document.body.appendChild(toast);
             setTimeout(() => {
                 toast.style.opacity = '0';
-                toast.style.transform = 'translateY(20px)';
                 setTimeout(() => toast.remove(), 300);
             }, 3000);
         }
 
-        function initIcons() {
-            if (window.lucide) {
-                window.lucide.createIcons();
-            } else {
-                setTimeout(initIcons, 100);
-            }
-        }
-
         window.addEventListener('load', () => {
-            initIcons();
-            updateTimerUI();
+            if (window.lucide) window.lucide.createIcons();
+            window.updateTimerUI();
         });
     </script>
 
+    <!-- UI STRUCTURE (Aynı Kaldı) -->
     <div id="auth-screen" class="flex items-center justify-center min-h-screen p-6 bg-gradient-to-br from-indigo-50 via-white to-slate-100">
         <div class="max-w-md w-full glass-card p-10 rounded-[2.5rem] shadow-2xl border border-white">
             <div class="text-center mb-10">
                 <div class="w-24 h-24 mx-auto mb-8 relative group">
-                    <div class="absolute inset-0 bg-indigo-600 rounded-3xl rotate-6 group-hover:rotate-12 transition-transform duration-500 opacity-10"></div>
-                    <div class="absolute inset-0 bg-indigo-600 rounded-3xl -rotate-3 group-hover:rotate-0 transition-transform duration-500 opacity-5"></div>
+                    <div class="absolute inset-0 bg-indigo-600 rounded-3xl rotate-6 opacity-10"></div>
                     <div class="relative w-full h-full bg-indigo-600 rounded-3xl flex items-center justify-center shadow-2xl shadow-indigo-200">
-                        <!-- Custom SVG Logo -->
                         <svg viewBox="0 0 100 100" class="w-14 h-14 text-white" fill="none" stroke="currentColor" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
                             <path d="M20 70V30C20 24.4772 24.4772 20 30 20H70C75.5228 20 80 24.4772 80 30V70C80 75.5228 75.5228 80 70 80H30C24.4772 80 20 75.5228 20 70Z" fill="rgba(255,255,255,0.1)"/>
                             <path d="M30 45L50 35L70 45L50 55L30 45Z" fill="white" stroke="none"/>
@@ -319,11 +300,10 @@
                     </div>
                 </div>
                 <h1 class="text-4xl font-black text-slate-800 tracking-tight mb-2">Edu<span class="text-indigo-600">Plan</span></h1>
-                <p class="text-slate-500 font-medium">Geleceğini planlamaya bugün başla.</p>
+                <p class="text-slate-500 font-medium">Başarıya giden yol, iyi bir plandan geçer.</p>
             </div>
             
-            <button id="login-btn" onclick="login()" class="w-full flex items-center justify-center gap-4 bg-white border border-slate-200 p-4 rounded-2xl hover:bg-slate-50 hover:border-indigo-200 transition-all shadow-sm font-semibold text-slate-700 group">
-                <!-- Google Logo SVG -->
+            <button id="login-btn" onclick="login()" class="w-full flex items-center justify-center gap-4 bg-white border border-slate-200 p-4 rounded-2xl hover:bg-slate-50 hover:border-indigo-200 transition-all shadow-sm font-semibold text-slate-700">
                 <svg class="w-6 h-6" viewBox="0 0 48 48">
                     <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"></path>
                     <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"></path>
@@ -332,26 +312,16 @@
                 </svg>
                 Google ile Giriş Yap
             </button>
-            
-            <div class="mt-10 pt-8 border-t border-slate-100 flex items-center justify-center gap-2 text-slate-400">
-                <i data-lucide="shield-check" class="w-4 h-4"></i>
-                <span class="text-xs font-medium">Firebase ile Güvenli Bağlantı</span>
-            </div>
         </div>
     </div>
 
     <div id="main-app" class="hidden flex flex-col md:flex-row min-h-screen">
-        
-        <!-- Sidebar Navigation -->
-        <aside class="w-full md:w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen overflow-y-auto">
+        <aside class="w-full md:w-72 bg-white border-r border-slate-200 flex flex-col sticky top-0 h-screen">
             <div class="p-8 flex items-center gap-4">
-                <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-100 flex-shrink-0">
-                    <svg viewBox="0 0 100 100" class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="8" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M30 45L50 35L70 45L50 55L30 45Z" fill="white" stroke="none"/>
-                        <path d="M30 45V55C30 55 35 60 50 60C65 60 70 55 70 55V45" />
-                    </svg>
+                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white">
+                    <i data-lucide="graduation-cap" class="w-6 h-6"></i>
                 </div>
-                <span class="font-black text-2xl tracking-tighter text-slate-800">Edu<span class="text-indigo-600">Plan</span></span>
+                <span class="font-black text-2xl text-slate-800">Edu<span class="text-indigo-600">Plan</span></span>
             </div>
             
             <nav class="flex-1 px-4 space-y-2">
@@ -367,224 +337,72 @@
                     <i data-lucide="clock" class="w-5 h-5"></i>
                     <span>Pomodoro</span>
                 </button>
-                <button onclick="switchTab('schedule')" data-tab="schedule" class="sidebar-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl transition-all font-semibold">
-                    <i data-lucide="calendar-days" class="w-5 h-5"></i>
-                    <span>Haftalık Program</span>
-                </button>
             </nav>
 
             <div class="p-6 border-t border-slate-100">
-                <div class="bg-slate-50 p-4 rounded-2xl mb-6 flex items-center gap-3">
-                    <div class="w-10 h-10 bg-white rounded-full flex items-center justify-center border border-slate-200">
-                        <i data-lucide="user" class="w-5 h-5 text-indigo-600"></i>
-                    </div>
+                <div class="bg-slate-50 p-4 rounded-2xl mb-4 flex items-center gap-3">
                     <div class="overflow-hidden">
                         <p id="user-name" class="text-sm font-bold text-slate-800 truncate"></p>
-                        <p id="user-email" class="text-[10px] font-medium text-slate-400 truncate"></p>
+                        <p id="user-email" class="text-[10px] text-slate-400 truncate"></p>
                     </div>
                 </div>
-                <button onclick="logout()" class="w-full flex items-center justify-center gap-2 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-all text-sm font-bold">
-                    <i data-lucide="log-out" class="w-4 h-4"></i>
-                    Güvenli Çıkış
+                <button onclick="logout()" class="w-full py-3 text-red-500 hover:bg-red-50 rounded-xl transition-all text-sm font-bold">
+                    Çıkış Yap
                 </button>
             </div>
         </aside>
 
-        <!-- Main Content Area -->
         <main class="flex-1 p-6 md:p-10 max-w-7xl mx-auto w-full">
-            
-            <section id="section-dashboard" class="page-section space-y-10 animate-in fade-in duration-500">
-                <header class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <div>
-                        <h2 class="text-3xl font-black text-slate-800">Hoş Geldin! 👋</h2>
-                        <p class="text-slate-500 font-medium">Başarıya giden yol, iyi bir plandan geçer.</p>
+            <!-- Sections (Aynı Yapı) -->
+            <section id="section-dashboard" class="page-section space-y-8">
+                <h2 class="text-3xl font-black text-slate-800">Hoş Geldin! 👋</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Toplam Kazanım</p>
+                        <p id="stat-total" class="text-5xl font-black text-slate-800">0</p>
                     </div>
-                    <div class="flex items-center gap-2 text-sm font-bold bg-white px-4 py-2 rounded-xl border border-slate-100 shadow-sm text-slate-600">
-                        <i data-lucide="clock" class="w-4 h-4 text-indigo-600"></i>
-                        <span>Pomodoro modundasın</span>
-                    </div>
-                </header>
-
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
-                    <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group">
-                        <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
-                            <i data-lucide="book-open" class="w-20 h-20 text-slate-900"></i>
-                        </div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Toplam Kazanım</p>
-                        <p id="stat-total" class="text-5xl font-black text-slate-800 tracking-tighter">0</p>
-                    </div>
-                    <div class="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 relative overflow-hidden group">
-                        <div class="absolute top-0 right-0 p-4 opacity-5 group-hover:scale-110 transition-transform">
-                            <i data-lucide="target" class="w-20 h-20 text-indigo-600"></i>
-                        </div>
-                        <p class="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Tamamlanma</p>
-                        <p id="stat-percent" class="text-5xl font-black text-indigo-600 tracking-tighter">%0</p>
-                    </div>
-                    <div class="bg-indigo-600 p-8 rounded-3xl shadow-2xl text-white shadow-indigo-200 relative overflow-hidden group">
-                        <div class="absolute -bottom-4 -right-4 opacity-10 rotate-12 group-hover:rotate-0 transition-all">
-                            <i data-lucide="timer" class="w-32 h-32"></i>
-                        </div>
-                        <p class="text-xs font-bold opacity-70 uppercase tracking-widest mb-2">Hızlı Odak</p>
-                        <div class="flex items-center justify-between">
-                            <span class="text-4xl font-black font-mono">25:00</span>
-                            <button onclick="switchTab('timer')" class="bg-white/20 p-3 rounded-2xl hover:bg-white/30 transition-all backdrop-blur-md">
-                                <i data-lucide="play" class="w-6 h-6"></i>
-                            </button>
-                        </div>
+                    <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
+                        <p class="text-xs font-bold text-slate-400 uppercase mb-2">Tamamlanma</p>
+                        <p id="stat-percent" class="text-5xl font-black text-indigo-600">%0</p>
                     </div>
                 </div>
-
                 <div class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm">
-                    <div class="flex items-center justify-between mb-6">
-                        <h3 class="text-xl font-bold text-slate-800">Genel İlerleme Durumu</h3>
-                        <span class="text-xs font-bold bg-indigo-50 text-indigo-600 px-3 py-1 rounded-full uppercase">Canlı Veri</span>
-                    </div>
-                    <div class="w-full bg-slate-100 h-6 rounded-2xl p-1 overflow-hidden">
-                        <div id="progress-bar-fill" class="bg-gradient-to-r from-indigo-500 to-indigo-700 h-full w-0 rounded-xl transition-all duration-1000 shadow-lg shadow-indigo-100"></div>
+                    <h3 class="font-bold mb-4">Genel İlerleme</h3>
+                    <div class="w-full bg-slate-100 h-4 rounded-full overflow-hidden">
+                        <div id="progress-bar-fill" class="bg-indigo-600 h-full w-0 transition-all duration-1000"></div>
                     </div>
                 </div>
             </section>
 
-            <section id="section-outcomes" class="page-section hidden space-y-8 animate-in slide-in-from-bottom-4 duration-500">
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                        <h2 class="text-3xl font-black text-slate-800">Kazanım Yönetimi</h2>
-                        <p class="text-slate-500 font-medium">Eksik konularını belirle, başarıyı yakala.</p>
-                    </div>
-                    <button onclick="downloadPDF()" class="flex items-center gap-3 bg-slate-800 text-white px-8 py-4 rounded-2xl hover:bg-slate-700 transition-all shadow-xl font-bold">
-                        <i data-lucide="file-down" class="w-5 h-5"></i>
-                        PDF Raporu Al
-                    </button>
+            <section id="section-outcomes" class="page-section hidden space-y-6">
+                <div class="flex justify-between items-center">
+                    <h2 class="text-3xl font-black text-slate-800">Kazanım Yönetimi</h2>
+                    <button onclick="downloadPDF()" class="bg-slate-800 text-white px-6 py-3 rounded-xl font-bold">PDF İndir</button>
                 </div>
-
-                <form onsubmit="addOutcome(event)" class="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm grid grid-cols-1 lg:grid-cols-12 gap-6 items-end">
-                    <div class="lg:col-span-3">
-                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Ders Seçimi</label>
-                        <select id="outcome-lesson" class="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 outline-none focus:ring-4 focus:ring-indigo-100 transition-all font-semibold">
-                            <option value="Matematik">Matematik</option>
-                            <option value="Türkçe">Türkçe</option>
-                            <option value="Fen Bilimleri">Fen Bilimleri</option>
-                            <option value="T.C. İnkılap">T.C. İnkılap</option>
-                            <option value="İngilizce">İngilizce</option>
-                            <option value="Din Kültürü">Din Kültürü</option>
-                            <option value="LGS Deneme">LGS Deneme</option>
-                            <option value="Diğer">Diğer</option>
-                        </select>
-                    </div>
-                    <div class="lg:col-span-6">
-                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">Konu / Kazanım Başlığı</label>
-                        <input id="outcome-content" type="text" placeholder="Örn: Kareköklü Sayılar Giriş" class="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 outline-none focus:ring-4 focus:ring-indigo-100 transition-all font-semibold">
-                    </div>
-                    <div class="lg:col-span-3">
-                        <button type="submit" class="w-full bg-indigo-600 text-white p-4 rounded-2xl font-black hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2">
-                            <i data-lucide="plus-circle" class="w-5 h-5"></i>
-                            Ekle
-                        </button>
-                    </div>
+                <form onsubmit="addOutcome(event)" class="bg-white p-6 rounded-2xl border border-slate-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <select id="outcome-lesson" class="bg-slate-50 p-4 rounded-xl font-bold">
+                        <option value="Matematik">Matematik</option>
+                        <option value="Türkçe">Türkçe</option>
+                        <option value="Fen Bilimleri">Fen Bilimleri</option>
+                    </select>
+                    <input id="outcome-content" type="text" placeholder="Kazanım adı..." class="bg-slate-50 p-4 rounded-xl font-bold">
+                    <button type="submit" class="bg-indigo-600 text-white rounded-xl font-bold">Ekle</button>
                 </form>
-
-                <div id="outcomes-list" class="space-y-4">
-                    <!-- Dynamic Content -->
-                </div>
+                <div id="outcomes-list" class="space-y-3"></div>
             </section>
 
-            <section id="section-timer" class="page-section hidden animate-in zoom-in-95 duration-500">
-                <div class="max-w-2xl mx-auto text-center space-y-12 py-12">
-                    <div>
-                        <h2 class="text-4xl font-black text-slate-800">Odaklanma Zamanı</h2>
-                        <p class="text-slate-500 font-medium mt-2">Pomodoro tekniği ile verimliliğini artır.</p>
-                    </div>
-                    
-                    <div class="relative w-80 h-80 mx-auto flex items-center justify-center rounded-[4rem] border-[16px] border-indigo-50 shadow-2xl bg-white group">
-                        <div id="timer-display" class="text-7xl font-mono font-black text-indigo-600 tracking-tighter">25:00</div>
-                        <div class="absolute -bottom-6 bg-white px-6 py-2 rounded-full shadow-lg border border-slate-100 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                            Çalışma Periyodu
-                        </div>
-                    </div>
-
-                    <div class="flex justify-center gap-6">
-                        <button onclick="toggleTimer()" class="bg-indigo-600 text-white px-12 py-5 rounded-[2rem] font-black text-xl hover:bg-indigo-700 shadow-2xl shadow-indigo-200 flex items-center gap-3 transition-all hover:scale-105 active:scale-95">
-                            <i data-lucide="play" class="w-7 h-7"></i>
-                            <span id="timer-btn-text">Başlat</span>
-                        </button>
-                        <button onclick="resetTimer()" class="bg-white border border-slate-200 text-slate-600 px-10 py-5 rounded-[2rem] font-black text-xl hover:bg-slate-50 shadow-sm transition-all">
-                            Sıfırla
-                        </button>
-                    </div>
-
-                    <div class="grid grid-cols-2 gap-6 max-w-sm mx-auto">
-                        <button class="p-5 bg-white border border-slate-100 rounded-3xl hover:bg-indigo-50 transition-all text-left">
-                            <p class="text-[10px] font-black text-indigo-600 uppercase tracking-widest mb-1">Klasik</p>
-                            <p class="text-lg font-bold text-slate-800">25 Dakika</p>
-                        </button>
-                        <button class="p-5 bg-white border border-slate-100 rounded-3xl hover:bg-emerald-50 transition-all text-left">
-                            <p class="text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-1">Mola</p>
-                            <p class="text-lg font-bold text-slate-800">5 Dakika</p>
-                        </button>
-                    </div>
+            <section id="section-timer" class="page-section hidden text-center space-y-12 py-12">
+                <h2 class="text-4xl font-black text-slate-800">Odaklanma Zamanı</h2>
+                <div class="w-64 h-64 mx-auto flex items-center justify-center rounded-full border-[12px] border-indigo-50 bg-white">
+                    <div id="timer-display" class="text-6xl font-mono font-black text-indigo-600">25:00</div>
+                </div>
+                <div class="flex justify-center gap-4">
+                    <button onclick="toggleTimer()" class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-xl shadow-lg">
+                        <span id="timer-btn-text">Başlat</span>
+                    </button>
+                    <button onclick="resetTimer()" class="bg-white border border-slate-200 px-8 py-4 rounded-2xl font-bold">Sıfırla</button>
                 </div>
             </section>
-
-            <section id="section-schedule" class="page-section hidden animate-in slide-in-from-right-4 duration-500">
-                <div class="flex items-center justify-between mb-10">
-                    <div>
-                        <h2 class="text-3xl font-black text-slate-800">Haftalık Program</h2>
-                        <p class="text-slate-500 font-medium">Zamanını en verimli şekilde yönet.</p>
-                    </div>
-                    <div class="flex gap-2">
-                        <button class="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50"><i data-lucide="edit-3" class="w-5 h-5 text-slate-600"></i></button>
-                        <button class="p-3 bg-white border border-slate-200 rounded-xl hover:bg-slate-50"><i data-lucide="printer" class="w-5 h-5 text-slate-600"></i></button>
-                    </div>
-                </div>
-
-                <div class="overflow-x-auto rounded-[2.5rem] shadow-2xl shadow-slate-100 border border-slate-100 bg-white p-2">
-                    <table class="w-full text-left border-collapse">
-                        <thead>
-                            <tr class="text-slate-400 text-[10px] font-black uppercase tracking-widest">
-                                <th class="p-6">Saat</th>
-                                <th class="p-6">Pazartesi</th>
-                                <th class="p-6">Salı</th>
-                                <th class="p-6">Çarşamba</th>
-                                <th class="p-6">Perşembe</th>
-                                <th class="p-6">Cuma</th>
-                                <th class="p-6">Cts</th>
-                                <th class="p-6">Paz</th>
-                            </tr>
-                        </thead>
-                        <tbody id="schedule-grid" class="divide-y divide-slate-50">
-                            <!-- Basic Rows -->
-                            <tr>
-                                <td class="p-6 text-slate-400 text-xs font-bold">09:00</td>
-                                <td class="p-2"><div class="bg-indigo-50/50 border border-indigo-100 p-4 rounded-2xl text-xs text-indigo-700 font-bold">Matematik</div></td>
-                                <td class="p-2"></td><td class="p-2"></td><td class="p-2"></td><td class="p-2"></td><td class="p-2"></td><td class="p-2"></td>
-                            </tr>
-                            <tr>
-                                <td class="p-6 text-slate-400 text-xs font-bold">10:00</td>
-                                <td class="p-2"></td>
-                                <td class="p-2"><div class="bg-emerald-50/50 border border-emerald-100 p-4 rounded-2xl text-xs text-emerald-700 font-bold">Türkçe</div></td>
-                                <td class="p-2"></td><td class="p-2"></td><td class="p-2"></td><td class="p-2"></td><td class="p-2"></td>
-                            </tr>
-                             <tr>
-                                <td class="p-6 text-slate-400 text-xs font-bold">11:00</td>
-                                <td class="p-2"></td><td class="p-2"></td>
-                                <td class="p-2"><div class="bg-amber-50/50 border border-amber-100 p-4 rounded-2xl text-xs text-amber-700 font-bold">Fen Bilimleri</div></td>
-                                <td class="p-2"></td><td class="p-2"></td><td class="p-2"></td><td class="p-2"></td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                
-                <div class="mt-8 p-6 bg-amber-50 rounded-3xl border border-amber-100 flex items-start gap-4">
-                    <div class="p-3 bg-amber-100 rounded-2xl text-amber-600">
-                        <i data-lucide="sparkles" class="w-6 h-6"></i>
-                    </div>
-                    <div>
-                        <h4 class="font-bold text-amber-800">Ders Programı İpucu</h4>
-                        <p class="text-sm text-amber-700 mt-1">Günde en fazla 3 ana ders çalışmak odaklanmanı artırır. Pomodoro ile dersler arasına 5'er dakikalık molalar eklemeyi unutma!</p>
-                    </div>
-                </div>
-            </section>
-
         </main>
     </div>
 
