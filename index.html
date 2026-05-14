@@ -19,21 +19,18 @@
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
         .page-section { animation: fadeIn 0.4s ease-out; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-        .loader { border-top-color: #4f46e5; animation: spinner 0.6s linear infinite; }
-        @keyframes spinner { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body class="bg-slate-50 text-slate-900 min-h-screen custom-scrollbar">
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Değişken Tanımlamaları
         const firebaseConfig = {
             apiKey: "AIzaSyDAticRTzXdnFKzi4okPm1TIoqrf27QAuQ",
-            authDomain: "appl-6eb7f.web.app", // ALTERNATİF DOMAIN: firebaseapp.com yerine web.app kullanıyoruz
+            authDomain: "appl-6eb7f.firebaseapp.com",
             projectId: "appl-6eb7f",
             storageBucket: "appl-6eb7f.firebasestorage.app",
             messagingSenderId: "1088954713905",
@@ -41,16 +38,12 @@
             measurementId: "G-GXD89LBV63"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
         const provider = new GoogleAuthProvider();
-        
-        // Google Giriş Ayarları - Zorunlu seçim ekranı (Hesap çakışmalarını önlemek için)
         provider.setCustomParameters({ prompt: 'select_account' });
 
-        // Global State
         window.state = {
             outcomes: [],
             activeTab: 'dashboard',
@@ -59,31 +52,37 @@
 
         window.login = async () => {
             const btn = document.getElementById('login-btn');
+            btn.disabled = true;
+            btn.innerHTML = '<div class="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mr-2"></div> Bağlanıyor...';
+            
             try {
-                btn.disabled = true;
-                btn.innerHTML = '<div class="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mr-2"></div> Bağlanıyor...';
-                
-                // Kalıcılığı ayarla ve giriş yap
                 await setPersistence(auth, browserLocalPersistence);
+                // Önce Popup dene, başarısız olursa Redirect'e geçecek
                 await signInWithPopup(auth, provider);
-                
             } catch (error) {
-                console.error("Login hatası:", error);
-                btn.disabled = false;
-                btn.innerHTML = `Google ile Giriş Yap`;
-                let errorMsg = "Bağlantı sorunu! Lütfen internetinizi kontrol edin veya tekrar deneyin.";
-                if(error.code === 'auth/popup-blocked') errorMsg = "Lütfen açılır pencerelere izin verin!";
-                if(error.code === 'auth/network-request-failed') errorMsg = "Firebase sunucusuna ulaşılamıyor. Lütfen sayfayı yenileyip tekrar deneyin.";
-                showNotification(errorMsg, "error");
+                console.error("Login Hatası:", error);
+                // Timeout veya Popup bloklanma durumunda Redirect (Yönlendirme) yöntemini dene
+                if (error.code === 'auth/popup-blocked' || error.code === 'auth/network-request-failed' || error.code === 'auth/internal-error') {
+                    showNotification("Yönlendirme moduna geçiliyor...", "info");
+                    await signInWithRedirect(auth, provider);
+                } else {
+                    showNotification("Giriş başarısız: " + error.message, "error");
+                    btn.disabled = false;
+                    btn.innerHTML = `Google ile Giriş Yap`;
+                }
             }
         };
 
         window.logout = () => signOut(auth);
 
+        // Yönlendirme sonrası sonucu kontrol et
+        getRedirectResult(auth).catch((error) => {
+            if(error) showNotification("Yönlendirme hatası: " + error.message, "error");
+        });
+
         onAuthStateChanged(auth, (user) => {
             const authScreen = document.getElementById('auth-screen');
             const mainApp = document.getElementById('main-app');
-
             if (user) {
                 window.currentUser = user;
                 authScreen.classList.add('hidden');
@@ -100,15 +99,11 @@
 
         async function loadUserData() {
             if (!window.currentUser) return;
-            const userId = window.currentUser.uid;
-            const q = query(collection(db, `users/${userId}/outcomes`), orderBy("createdAt", "desc"));
-
+            const q = query(collection(db, `users/${window.currentUser.uid}/outcomes`), orderBy("createdAt", "desc"));
             onSnapshot(q, (snapshot) => {
                 window.state.outcomes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 renderOutcomes();
                 updateDashboardStats();
-            }, (err) => {
-                console.error("Veri çekme hatası:", err);
             });
         }
 
@@ -116,32 +111,22 @@
             e.preventDefault();
             const lesson = document.getElementById('outcome-lesson').value;
             const content = document.getElementById('outcome-content').value;
-            
-            if(!lesson || !content || !window.currentUser) return;
-
+            if(!content || !window.currentUser) return;
             try {
-                const userId = window.currentUser.uid;
-                await addDoc(collection(db, `users/${userId}/outcomes`), {
-                    lesson,
-                    content,
-                    completed: false,
-                    createdAt: new Date().toISOString()
+                await addDoc(collection(db, `users/${window.currentUser.uid}/outcomes`), {
+                    lesson, content, completed: false, createdAt: new Date().toISOString()
                 });
                 document.getElementById('outcome-content').value = "";
                 showNotification("Kazanım eklendi.");
-            } catch (err) {
-                showNotification("Hata oluştu!", "error");
-            }
+            } catch (err) { showNotification("Hata: " + err.message, "error"); }
         };
 
         window.toggleOutcome = async (id, currentStatus) => {
-            if (!window.currentUser) return;
             const docRef = doc(db, `users/${window.currentUser.uid}/outcomes`, id);
             await updateDoc(docRef, { completed: !currentStatus });
         };
 
         window.deleteOutcome = async (id) => {
-            if (!window.currentUser) return;
             await deleteDoc(doc(db, `users/${window.currentUser.uid}/outcomes`, id));
             showNotification("Kazanım silindi.");
         };
@@ -150,41 +135,26 @@
             window.state.activeTab = tabId;
             document.querySelectorAll('.page-section').forEach(s => s.classList.add('hidden'));
             document.getElementById(`section-${tabId}`).classList.remove('hidden');
-            
-            document.querySelectorAll('.sidebar-item').forEach(item => {
-                item.classList.toggle('active', item.dataset.tab === tabId);
-            });
+            document.querySelectorAll('.sidebar-item').forEach(item => item.classList.toggle('active', item.dataset.tab === tabId));
             if (window.lucide) window.lucide.createIcons();
         };
 
         window.updateTimerUI = () => {
             const t = window.state.timer;
-            const display = document.getElementById('timer-display');
-            if(display) display.innerText = `${String(t.minutes).padStart(2, '0')}:${String(t.seconds).padStart(2, '0')}`;
-            const btn = document.getElementById('timer-btn-text');
-            if(btn) btn.innerText = t.isRunning ? 'Durdur' : 'Başlat';
+            document.getElementById('timer-display').innerText = `${String(t.minutes).padStart(2, '0')}:${String(t.seconds).padStart(2, '0')}`;
+            document.getElementById('timer-btn-text').innerText = t.isRunning ? 'Durdur' : 'Başlat';
         };
 
         window.toggleTimer = () => {
             const t = window.state.timer;
-            if (t.isRunning) {
-                clearInterval(t.interval);
-                t.isRunning = false;
-            } else {
+            if (t.isRunning) { clearInterval(t.interval); t.isRunning = false; }
+            else {
                 t.isRunning = true;
                 t.interval = setInterval(() => {
                     if (t.seconds === 0) {
-                        if (t.minutes === 0) {
-                            clearInterval(t.interval);
-                            t.isRunning = false;
-                            showNotification("Süre doldu! Tebrikler.");
-                        } else {
-                            t.minutes--;
-                            t.seconds = 59;
-                        }
-                    } else {
-                        t.seconds--;
-                    }
+                        if (t.minutes === 0) { clearInterval(t.interval); t.isRunning = false; showNotification("Süre doldu!"); }
+                        else { t.minutes--; t.seconds = 59; }
+                    } else { t.seconds--; }
                     window.updateTimerUI();
                 }, 1000);
             }
@@ -201,22 +171,19 @@
             const list = document.getElementById('outcomes-list');
             if(!list) return;
             if (!window.state.outcomes.length) {
-                list.innerHTML = `<div class="text-center py-12 bg-white rounded-3xl border-2 border-dashed border-slate-100"><p class="text-slate-400 font-medium">Henüz bir kazanım eklenmedi.</p></div>`;
+                list.innerHTML = `<div class="text-center py-12 bg-white rounded-3xl border-2 border-dashed border-slate-100"><p class="text-slate-400 font-medium">Henüz bir kazanım yok.</p></div>`;
                 return;
             }
             list.innerHTML = window.state.outcomes.map(o => `
                 <div class="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-2xl mb-4 shadow-sm hover:shadow-md transition-all group">
                     <div class="flex items-center gap-4 flex-1">
-                        <div class="relative flex items-center">
-                            <input type="checkbox" ${o.completed ? 'checked' : ''} onchange="toggleOutcome('${o.id}', ${o.completed})" 
-                                   class="w-6 h-6 rounded-lg border-2 border-slate-200 text-indigo-600 focus:ring-indigo-500 cursor-pointer transition-all">
-                        </div>
+                        <input type="checkbox" ${o.completed ? 'checked' : ''} onchange="toggleOutcome('${o.id}', ${o.completed})" class="w-6 h-6 rounded-lg border-2 border-slate-200 text-indigo-600 cursor-pointer">
                         <div>
                             <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 uppercase mb-1">${o.lesson}</span>
-                            <p class="${o.completed ? 'line-through text-slate-400' : 'text-slate-700'} font-semibold leading-tight">${o.content}</p>
+                            <p class="${o.completed ? 'line-through text-slate-400' : 'text-slate-700'} font-semibold">${o.content}</p>
                         </div>
                     </div>
-                    <button onclick="deleteOutcome('${o.id}')" class="text-slate-300 hover:text-red-500 p-2 transition-colors opacity-0 group-hover:opacity-100">
+                    <button onclick="deleteOutcome('${o.id}')" class="text-slate-300 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition-all">
                         <i data-lucide="trash-2" class="w-5 h-5"></i>
                     </button>
                 </div>
@@ -228,7 +195,6 @@
             const total = window.state.outcomes.length;
             const completed = window.state.outcomes.filter(o => o.completed).length;
             const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
-
             document.getElementById('stat-total').innerText = total;
             document.getElementById('stat-percent').innerText = `%${percent}`;
             document.getElementById('progress-bar-fill').style.width = `${percent}%`;
@@ -238,205 +204,110 @@
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
             const missing = window.state.outcomes.filter(o => !o.completed);
-            
-            if (!missing.length) return showNotification("Eksik kazanımınız bulunmuyor!");
-
-            doc.setFontSize(22);
-            doc.setTextColor(79, 70, 229);
+            if (!missing.length) return showNotification("Eksik kazanım yok!", "info");
             doc.text("EduPlan Eksik Kazanımlar Raporu", 14, 25);
-            
-            doc.setFontSize(10);
-            doc.setTextColor(100, 100, 100);
-            doc.text(`Tarih: ${new Date().toLocaleDateString('tr-TR')} | Kullanıcı: ${window.currentUser.displayName}`, 14, 35);
-
             doc.autoTable({
-                startY: 45,
-                head: [['Ders', 'Kazanım Detayı', 'Durum']],
-                body: missing.map(o => [o.lesson, o.content, 'Eksik']),
-                styles: { font: 'helvetica', fontSize: 10 },
-                headStyles: { fillColor: [79, 70, 229], textColor: 255 },
-                alternateRowStyles: { fillColor: [249, 250, 251] }
+                startY: 35,
+                head: [['Ders', 'Kazanım Detayı']],
+                body: missing.map(o => [o.lesson, o.content]),
+                headStyles: { fillColor: [79, 70, 229] }
             });
-            doc.save(`EduPlan_Eksik_Kazanımlar_${new Date().toLocaleDateString()}.pdf`);
+            doc.save(`Eksik_Kazanımlar_${new Date().toLocaleDateString()}.pdf`);
         };
 
         function showNotification(msg, type = 'success') {
             const toast = document.createElement('div');
-            toast.className = `fixed bottom-6 right-6 px-6 py-4 rounded-2xl shadow-2xl text-white z-[100] flex items-center gap-3 transition-all duration-500 transform translate-y-20 ${type === 'success' ? 'bg-indigo-600' : 'bg-red-500'}`;
-            toast.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}" class="w-5 h-5"></i> <span class="font-bold">${msg}</span>`;
+            toast.className = `fixed bottom-6 right-6 px-6 py-4 rounded-2xl shadow-2xl text-white z-[100] flex items-center gap-3 transition-all duration-500 ${type === 'success' ? 'bg-indigo-600' : type === 'info' ? 'bg-blue-500' : 'bg-red-500'}`;
+            toast.innerHTML = `<span class="font-bold">${msg}</span>`;
             document.body.appendChild(toast);
-            if (window.lucide) window.lucide.createIcons();
-            
-            setTimeout(() => toast.classList.remove('translate-y-20'), 100);
-            setTimeout(() => {
-                toast.classList.add('opacity-0', 'translate-y-10');
-                setTimeout(() => toast.remove(), 500);
-            }, 4000);
+            setTimeout(() => { toast.classList.add('opacity-0'); setTimeout(() => toast.remove(), 500); }, 3000);
         }
 
-        window.addEventListener('load', () => {
-            if (window.lucide) window.lucide.createIcons();
-            window.updateTimerUI();
-        });
+        window.addEventListener('load', () => { if (window.lucide) window.lucide.createIcons(); window.updateTimerUI(); });
     </script>
 
-    <div id="auth-screen" class="flex items-center justify-center min-h-screen p-6 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-indigo-100 via-white to-slate-50">
-        <div class="max-w-md w-full glass-card p-12 rounded-[3rem] shadow-2xl relative overflow-hidden">
-            <div class="absolute -top-24 -right-24 w-48 h-48 bg-indigo-100 rounded-full opacity-50 blur-3xl"></div>
-            <div class="absolute -bottom-24 -left-24 w-48 h-48 bg-blue-100 rounded-full opacity-50 blur-3xl"></div>
-            
-            <div class="relative text-center mb-12">
-                <div class="w-24 h-24 mx-auto mb-8 relative group">
-                    <div class="absolute inset-0 bg-indigo-600 rounded-[2rem] rotate-12 opacity-10 group-hover:rotate-45 transition-transform duration-700"></div>
-                    <div class="relative w-full h-full bg-gradient-to-br from-indigo-600 to-blue-700 rounded-[2rem] flex items-center justify-center shadow-xl shadow-indigo-200">
-                        <svg viewBox="0 0 100 100" class="w-14 h-14 text-white" fill="none" stroke="currentColor" stroke-width="6">
-                            <path d="M20 70V30C20 24.4 24.4 20 30 20H70C75.6 20 80 24.4 80 30V70C80 75.6 75.6 80 70 80H30C24.4 80 20 75.6 20 70Z" fill="rgba(255,255,255,0.15)"/>
-                            <path d="M30 45L50 35L70 45L50 55L30 45Z" fill="white" stroke="none"/>
-                            <path d="M30 45V55C30 55 35 60 50 60C65 60 70 55 70 55V45" stroke-linecap="round"/>
-                            <path d="M50 35V25M70 45V55" stroke-width="4" stroke-linecap="round"/>
-                        </svg>
-                    </div>
-                </div>
-                <h1 class="text-4xl font-black text-slate-800 tracking-tight mb-3">Edu<span class="text-indigo-600">Plan</span></h1>
-                <p class="text-slate-500 font-medium">Bütünsel çalışma platformuna hoş geldiniz.</p>
+    <div id="auth-screen" class="flex items-center justify-center min-h-screen p-6 bg-slate-50">
+        <div class="max-w-md w-full glass-card p-12 rounded-[3rem] shadow-2xl text-center">
+            <div class="w-24 h-24 mx-auto mb-8 bg-gradient-to-br from-indigo-600 to-blue-700 rounded-[2rem] flex items-center justify-center shadow-xl">
+                <i data-lucide="graduation-cap" class="w-12 h-12 text-white"></i>
             </div>
-            
-            <button id="login-btn" onclick="login()" class="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-100 p-5 rounded-2xl hover:bg-slate-50 hover:border-indigo-200 hover:shadow-lg transition-all font-bold text-slate-700 group">
-                <svg class="w-6 h-6 group-hover:scale-110 transition-transform" viewBox="0 0 48 48">
-                    <path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"></path>
-                    <path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4c-7.7 0-14.3 4.3-17.7 10.7z"></path>
-                    <path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2.1 1.5-4.6 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"></path>
-                    <path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"></path>
-                </svg>
+            <h1 class="text-4xl font-black text-slate-800 mb-2">Edu<span class="text-indigo-600">Plan</span></h1>
+            <p class="text-slate-500 mb-10">Lütfen Google ile giriş yapın.</p>
+            <button id="login-btn" onclick="login()" class="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-100 p-5 rounded-2xl hover:border-indigo-200 transition-all font-bold">
+                <svg class="w-6 h-6" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"></path><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4c-7.7 0-14.3 4.3-17.7 10.7z"></path><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2.1 1.5-4.6 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"></path><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"></path></svg>
                 Google ile Giriş Yap
             </button>
         </div>
     </div>
 
     <div id="main-app" class="hidden flex flex-col lg:flex-row min-h-screen">
-        <aside class="w-full lg:w-80 bg-white border-r border-slate-100 flex flex-col sticky top-0 h-screen z-20">
+        <aside class="w-full lg:w-80 bg-white border-r border-slate-100 flex flex-col h-screen sticky top-0">
             <div class="p-10 flex items-center gap-4">
-                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
-                    <i data-lucide="graduation-cap" class="w-6 h-6"></i>
-                </div>
-                <span class="font-black text-2xl tracking-tighter">Edu<span class="text-indigo-600">Plan</span></span>
+                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white"><i data-lucide="graduation-cap"></i></div>
+                <span class="font-black text-2xl">Edu<span class="text-indigo-600">Plan</span></span>
             </div>
-            
-            <nav class="flex-1 px-6 space-y-3">
-                <button onclick="switchTab('dashboard')" data-tab="dashboard" class="sidebar-item active w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold">
-                    <i data-lucide="layout-dashboard" class="w-5 h-5"></i> Genel Bakış
-                </button>
-                <button onclick="switchTab('outcomes')" data-tab="outcomes" class="sidebar-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold">
-                    <i data-lucide="list-checks" class="w-5 h-5"></i> Kazanım Takibi
-                </button>
-                <button onclick="switchTab('timer')" data-tab="timer" class="sidebar-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold">
-                    <i data-lucide="clock" class="w-5 h-5"></i> Pomodoro
-                </button>
+            <nav class="flex-1 px-6 space-y-2">
+                <button onclick="switchTab('dashboard')" data-tab="dashboard" class="sidebar-item active w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold"><i data-lucide="layout-dashboard"></i> Genel Bakış</button>
+                <button onclick="switchTab('outcomes')" data-tab="outcomes" class="sidebar-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold"><i data-lucide="list-checks"></i> Kazanımlar</button>
+                <button onclick="switchTab('timer')" data-tab="timer" class="sidebar-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold"><i data-lucide="clock"></i> Pomodoro</button>
             </nav>
-
-            <div class="p-8 border-t border-slate-50">
-                <div class="bg-slate-50 p-5 rounded-2xl mb-6">
-                    <p id="user-name" class="text-sm font-black text-slate-800 truncate"></p>
-                    <p id="user-email" class="text-[10px] text-slate-400 font-bold uppercase tracking-wider truncate"></p>
-                </div>
-                <button onclick="logout()" class="w-full py-4 text-red-500 hover:bg-red-50 rounded-2xl transition-all text-sm font-black flex items-center justify-center gap-2">
-                    <i data-lucide="log-out" class="w-4 h-4"></i> Çıkış Yap
+            <div class="p-8 border-t">
+                <p id="user-name" class="text-sm font-black truncate"></p>
+                <button onclick="logout()" class="w-full mt-4 py-3 text-red-500 hover:bg-red-50 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2">
+                    <i data-lucide="log-out" class="w-4 h-4"></i> Çıkış
                 </button>
             </div>
         </aside>
 
-        <main class="flex-1 p-8 lg:p-14 max-w-6xl mx-auto w-full overflow-y-auto">
-            <!-- Dashboard -->
+        <main class="flex-1 p-8 lg:p-14 max-w-6xl mx-auto w-full">
             <section id="section-dashboard" class="page-section space-y-10">
-                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                    <h2 class="text-4xl font-black text-slate-800 tracking-tight">Hoş Geldin! 👋</h2>
-                    <div class="bg-indigo-600 text-white px-6 py-2 rounded-full text-xs font-black uppercase tracking-widest">Premium Versiyon v1.0</div>
-                </div>
-                
+                <h2 class="text-4xl font-black text-slate-800">Hoş Geldin! 👋</h2>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div class="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
-                        <div class="absolute top-0 right-0 p-8 text-indigo-50 group-hover:text-indigo-100 transition-colors">
-                            <i data-lucide="book-open" class="w-16 h-16"></i>
-                        </div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Toplam Kazanım</p>
-                        <p id="stat-total" class="text-6xl font-black text-slate-800">0</p>
+                    <div class="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Toplam Kazanım</p>
+                        <p id="stat-total" class="text-6xl font-black">0</p>
                     </div>
-                    <div class="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm relative overflow-hidden group">
-                        <div class="absolute top-0 right-0 p-8 text-emerald-50 group-hover:text-emerald-100 transition-colors">
-                            <i data-lucide="award" class="w-16 h-16"></i>
-                        </div>
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-4">Başarı Oranı</p>
+                    <div class="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
+                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Başarı Oranı</p>
                         <p id="stat-percent" class="text-6xl font-black text-emerald-500">%0</p>
                     </div>
                 </div>
-
                 <div class="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                    <div class="flex items-center justify-between mb-6">
-                        <h3 class="font-black text-slate-700">Genel İlerleme</h3>
-                        <span class="text-xs font-bold text-slate-400">Haftalık Hedef: 100%</span>
-                    </div>
-                    <div class="w-full bg-slate-100 h-6 rounded-2xl overflow-hidden p-1">
-                        <div id="progress-bar-fill" class="bg-gradient-to-r from-indigo-500 to-blue-600 h-full w-0 rounded-xl transition-all duration-1000 shadow-lg"></div>
+                    <div class="flex justify-between mb-4"><h3 class="font-bold">İlerleme Durumu</h3></div>
+                    <div class="w-full bg-slate-100 h-4 rounded-full overflow-hidden">
+                        <div id="progress-bar-fill" class="bg-indigo-600 h-full w-0 transition-all duration-1000"></div>
                     </div>
                 </div>
             </section>
 
-            <!-- Outcomes -->
             <section id="section-outcomes" class="page-section hidden space-y-8">
-                <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <h2 class="text-4xl font-black text-slate-800 tracking-tight">Kazanım Takibi</h2>
-                    <button onclick="downloadPDF()" class="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black shadow-xl hover:bg-slate-800 hover:-translate-y-1 transition-all flex items-center gap-2">
-                        <i data-lucide="file-down" class="w-5 h-5"></i> Eksikleri PDF İndir
+                <div class="flex justify-between items-center">
+                    <h2 class="text-4xl font-black text-slate-800">Kazanım Takibi</h2>
+                    <button onclick="downloadPDF()" class="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
+                        <i data-lucide="file-down"></i> PDF İndir
                     </button>
                 </div>
-
-                <form onsubmit="addOutcome(event)" class="bg-white p-8 rounded-[2.5rem] border border-slate-100 shadow-sm grid grid-cols-1 md:grid-cols-5 gap-4">
-                    <div class="md:col-span-2">
-                        <label class="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block">Ders Seçin</label>
-                        <select id="outcome-lesson" class="w-full bg-slate-50 p-4 rounded-2xl font-bold border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-600 transition-all outline-none">
-                            <option value="Matematik">Matematik</option>
-                            <option value="Türkçe">Türkçe</option>
-                            <option value="Fen Bilimleri">Fen Bilimleri</option>
-                            <option value="Sosyal Bilgiler">Sosyal Bilgiler</option>
-                            <option value="İngilizce">İngilizce</option>
-                        </select>
-                    </div>
-                    <div class="md:col-span-2">
-                        <label class="text-[10px] font-black text-slate-400 uppercase ml-2 mb-2 block">Kazanım / Konu</label>
-                        <input id="outcome-content" type="text" placeholder="Örn: Üslü sayılar tekrarı" class="w-full bg-slate-50 p-4 rounded-2xl font-bold border-none ring-1 ring-slate-200 focus:ring-2 focus:ring-indigo-600 transition-all outline-none">
-                    </div>
-                    <div class="flex items-end">
-                        <button type="submit" class="w-full bg-indigo-600 text-white h-[56px] rounded-2xl font-black hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition-all">Ekle</button>
-                    </div>
+                <form onsubmit="addOutcome(event)" class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4">
+                    <select id="outcome-lesson" class="bg-slate-50 p-4 rounded-xl font-bold border-none ring-1 ring-slate-200 outline-none">
+                        <option>Matematik</option><option>Türkçe</option><option>Fen</option><option>Sosyal</option><option>İngilizce</option>
+                    </select>
+                    <input id="outcome-content" type="text" placeholder="Kazanım açıklaması..." class="flex-1 bg-slate-50 p-4 rounded-xl font-bold border-none ring-1 ring-slate-200 outline-none">
+                    <button type="submit" class="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-indigo-700 transition-all">Ekle</button>
                 </form>
-
-                <div id="outcomes-list" class="grid grid-cols-1 gap-1"></div>
+                <div id="outcomes-list"></div>
             </section>
 
-            <!-- Timer -->
-            <section id="section-timer" class="page-section hidden py-10 text-center space-y-12">
-                <div class="space-y-4">
-                    <h2 class="text-5xl font-black text-slate-800 tracking-tighter">Odaklanma Zamanı</h2>
-                    <p class="text-slate-400 font-medium max-w-sm mx-auto">Pomodoro tekniği ile verimliliğini artır. 25 dakika çalış, 5 dakika mola ver.</p>
+            <section id="section-timer" class="page-section hidden text-center space-y-12 py-10">
+                <h2 class="text-5xl font-black text-slate-800">Odaklanma</h2>
+                <div class="w-72 h-72 mx-auto rounded-full border-[12px] border-indigo-50 bg-white shadow-2xl flex flex-col items-center justify-center">
+                    <div id="timer-display" class="text-6xl font-black text-indigo-600">25:00</div>
                 </div>
-                
-                <div class="relative w-80 h-80 mx-auto group">
-                    <div class="absolute inset-0 bg-indigo-600 rounded-full opacity-5 blur-3xl group-hover:opacity-10 transition-opacity"></div>
-                    <div class="relative w-full h-full flex flex-col items-center justify-center rounded-full border-[16px] border-indigo-50 bg-white shadow-2xl">
-                        <div id="timer-display" class="text-7xl font-black text-indigo-600 tracking-tighter">25:00</div>
-                        <div class="text-[10px] font-black text-slate-300 uppercase tracking-widest mt-2">Kalan Süre</div>
-                    </div>
-                </div>
-
                 <div class="flex justify-center gap-6">
-                    <button onclick="toggleTimer()" class="bg-indigo-600 text-white px-12 py-5 rounded-[2rem] font-black text-xl shadow-2xl shadow-indigo-200 hover:scale-105 transition-all">
-                        <span id="timer-btn-text">Başlat</span>
-                    </button>
-                    <button onclick="resetTimer()" class="bg-white border-2 border-slate-100 px-10 py-5 rounded-[2rem] font-black text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-all">Sıfırla</button>
+                    <button onclick="toggleTimer()" class="bg-indigo-600 text-white px-12 py-5 rounded-2xl font-black shadow-lg"><span id="timer-btn-text">Başlat</span></button>
+                    <button onclick="resetTimer()" class="bg-white border-2 border-slate-100 px-10 py-5 rounded-2xl font-black text-slate-400">Sıfırla</button>
                 </div>
             </section>
         </main>
     </div>
-
 </body>
 </html>
