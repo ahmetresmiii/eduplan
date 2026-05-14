@@ -1,32 +1,189 @@
+```html
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>EduPlan - Hepsi Bir Arada Çalışma Platformu</title>
+    <title>EduPlan - Hepsi Bir Arada Eğitim Platformu</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.0/umd/lucide.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
-        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(12px); border: 1px solid rgba(255,255,255,0.2); }
-        .sidebar-item { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
-        .sidebar-item.active { background: #4f46e5; color: white; box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.4); }
-        .sidebar-item:not(.active):hover { background: #f1f5f9; color: #4f46e5; }
+        body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .glass { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(226, 232, 240, 0.8); }
         .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-        .custom-scrollbar::-webkit-scrollbar-thumb { background: #e2e8f0; border-radius: 10px; }
-        .page-section { animation: fadeIn 0.4s ease-out; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .loader { border-top-color: #6366f1; animation: spinner 1.5s linear infinite; }
+        @keyframes spinner { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="bg-slate-50 text-slate-900 min-h-screen custom-scrollbar">
+<body class="text-slate-800">
 
+    <!-- Auth Ekranı -->
+    <div id="auth-screen" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-50 p-4">
+        <div class="max-w-md w-full glass p-8 rounded-3xl shadow-2xl space-y-6">
+            <div class="text-center">
+                <div class="flex justify-center mb-4">
+                    <svg width="60" height="60" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-600 bg-indigo-50 p-3 rounded-2xl">
+                        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+                        <path d="M8 7h6"></path>
+                        <path d="M8 11h8"></path>
+                    </svg>
+                </div>
+                <h1 class="text-3xl font-extrabold text-slate-900">EduPlan</h1>
+                <p class="text-slate-500 mt-2">Öğrenme sürecini modernize et</p>
+            </div>
+
+            <div class="space-y-4">
+                <!-- E-posta Formu -->
+                <div class="space-y-3">
+                    <input id="email-input" type="email" placeholder="E-posta Adresiniz" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all">
+                    <input id="password-input" type="password" placeholder="Şifreniz" class="w-full px-4 py-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-indigo-500 focus:outline-none transition-all">
+                    <div class="flex gap-2">
+                        <button onclick="handleEmailLogin()" class="flex-1 bg-indigo-600 text-white py-3 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-200">Giriş Yap</button>
+                        <button onclick="handleEmailSignUp()" class="flex-1 bg-white text-indigo-600 border-2 border-indigo-600 py-3 rounded-xl font-semibold hover:bg-indigo-50 transition-all">Kayıt Ol</button>
+                    </div>
+                </div>
+
+                <div class="relative flex py-3 items-center">
+                    <div class="flex-grow border-t border-slate-200"></div>
+                    <span class="flex-shrink mx-4 text-slate-400 text-sm">veya</span>
+                    <div class="flex-grow border-t border-slate-200"></div>
+                </div>
+
+                <!-- Google Butonu -->
+                <button id="google-login-btn" onclick="handleGoogleLogin()" class="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 py-3 rounded-xl font-medium hover:bg-slate-50 transition-all">
+                    <svg width="20" height="20" viewBox="0 0 48 48">
+                        <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"></path>
+                        <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"></path>
+                        <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24s.92 7.54 2.56 10.78l7.97-6.19z"></path>
+                        <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"></path>
+                    </svg>
+                    Google ile Devam Et
+                </button>
+            </div>
+            
+            <p id="auth-error" class="text-red-500 text-sm text-center hidden"></p>
+        </div>
+    </div>
+
+    <!-- Ana Uygulama -->
+    <div id="app-content" class="hidden min-h-screen flex">
+        
+        <!-- Sidebar -->
+        <aside class="w-64 glass hidden md:flex flex-col fixed h-full z-40">
+            <div class="p-6">
+                <div class="flex items-center gap-3 mb-10">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="text-indigo-600">
+                        <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z"></path>
+                    </svg>
+                    <span class="text-xl font-bold tracking-tight">EduPlan</span>
+                </div>
+                <nav class="space-y-2">
+                    <button onclick="showPage('outcomes')" class="w-full flex items-center gap-3 px-4 py-3 text-indigo-600 bg-indigo-50 rounded-xl font-medium transition-all">
+                        <span>🎯 Kazanımlar</span>
+                    </button>
+                    <button onclick="showPage('timer')" class="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-all">
+                        <span>⏱️ Zamanlayıcı</span>
+                    </button>
+                    <button onclick="showPage('schedule')" class="w-full flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-100 rounded-xl font-medium transition-all">
+                        <span>📅 Program</span>
+                    </button>
+                </nav>
+            </div>
+            <div class="mt-auto p-6 border-t border-slate-100">
+                <div id="user-info" class="flex items-center gap-3 mb-4">
+                    <div id="user-avatar" class="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600 font-bold uppercase"></div>
+                    <div class="flex flex-col">
+                        <span id="user-name" class="text-sm font-semibold truncate max-w-[120px]">Kullanıcı</span>
+                        <button onclick="logout()" class="text-xs text-red-500 hover:underline text-left">Çıkış Yap</button>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Body -->
+        <main class="flex-1 md:ml-64 p-4 md:p-8">
+            
+            <!-- Kazanımlar Sayfası -->
+            <section id="page-outcomes" class="page-section space-y-6">
+                <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-2xl font-bold text-slate-900">Kazanım Takibi</h2>
+                        <p class="text-slate-500">Ders bazlı eksiklerini planla ve yönet.</p>
+                    </div>
+                    <button onclick="downloadOutcomesPDF()" class="bg-indigo-600 text-white px-6 py-3 rounded-xl font-semibold shadow-lg shadow-indigo-100 hover:bg-indigo-700 transition-all flex items-center gap-2">
+                        📥 Eksikleri PDF İndir
+                    </button>
+                </div>
+
+                <!-- Kazanım Ekleme -->
+                <div class="glass p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col md:flex-row gap-3">
+                    <select id="outcome-subject" class="bg-white border border-slate-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
+                        <option value="Matematik">Matematik</option>
+                        <option value="Türkçe">Türkçe</option>
+                        <option value="Fen Bilimleri">Fen Bilimleri</option>
+                        <option value="Sosyal Bilgiler">Sosyal Bilgiler</option>
+                        <option value="İngilizce">İngilizce</option>
+                        <option value="Diğer">Diğer</option>
+                    </select>
+                    <input id="outcome-text" type="text" placeholder="Eksik olduğunuz kazanımı yazın..." class="flex-1 bg-white border border-slate-200 px-4 py-3 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none">
+                    <button onclick="addOutcome()" class="bg-slate-900 text-white px-8 py-3 rounded-xl font-medium hover:bg-slate-800 transition-all">Ekle</button>
+                </div>
+
+                <!-- Kazanım Listesi -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="outcomes-list">
+                    <!-- Dinamik yüklenecek -->
+                </div>
+            </section>
+
+            <!-- Zamanlayıcı Sayfası -->
+            <section id="page-timer" class="page-section hidden space-y-6">
+                <div class="text-center py-12">
+                    <h2 class="text-4xl font-black text-indigo-600 mb-2">Pomodoro</h2>
+                    <p class="text-slate-500">25 dakika odaklan, 5 dakika dinlen.</p>
+                </div>
+                <div class="max-w-md mx-auto glass p-10 rounded-[3rem] text-center shadow-xl">
+                    <div id="timer-display" class="text-7xl font-mono font-bold text-slate-800 mb-8 tracking-tighter">25:00</div>
+                    <div class="flex justify-center gap-4">
+                        <button id="timer-btn" onclick="toggleTimer()" class="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100">Başlat</button>
+                        <button onclick="resetTimer()" class="bg-slate-100 text-slate-600 px-10 py-4 rounded-2xl font-bold hover:bg-slate-200 transition-all">Sıfırla</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Program Sayfası -->
+            <section id="page-schedule" class="page-section hidden space-y-6">
+                <h2 class="text-2xl font-bold">Haftalık Program</h2>
+                <div class="overflow-x-auto glass rounded-2xl">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-slate-50">
+                                <th class="p-4 border-b border-slate-200">Saat</th>
+                                <th class="p-4 border-b border-slate-200">Pzt</th>
+                                <th class="p-4 border-b border-slate-200">Sal</th>
+                                <th class="p-4 border-b border-slate-200">Çar</th>
+                                <th class="p-4 border-b border-slate-200">Per</th>
+                                <th class="p-4 border-b border-slate-200">Cum</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedule-body">
+                            <!-- JS ile dolacak -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <!-- Firebase -->
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, where, deleteDoc, doc, updateDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
 
         const firebaseConfig = {
             apiKey: "AIzaSyDAticRTzXdnFKzi4okPm1TIoqrf27QAuQ",
@@ -34,280 +191,242 @@
             projectId: "appl-6eb7f",
             storageBucket: "appl-6eb7f.firebasestorage.app",
             messagingSenderId: "1088954713905",
-            appId: "1:1088954713905:web:81603ac97b6432e2add210",
-            measurementId: "G-GXD89LBV63"
+            appId: "1:1088954713905:web:81603ac97b6432e2add210"
         };
 
         const app = initializeApp(firebaseConfig);
         const auth = getAuth(app);
         const db = getFirestore(app);
         const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
 
-        window.state = {
-            outcomes: [],
-            activeTab: 'dashboard',
-            timer: { minutes: 25, seconds: 0, isRunning: false, interval: null }
-        };
+        let userOutcomes = [];
+        let currentUser = null;
 
-        window.login = async () => {
-            const btn = document.getElementById('login-btn');
-            btn.disabled = true;
-            btn.innerHTML = '<div class="w-5 h-5 border-2 border-indigo-600 border-t-transparent rounded-full animate-spin mr-2"></div> Bağlanıyor...';
-            
+        // Auth İşlemleri
+        window.handleGoogleLogin = async () => {
             try {
-                await setPersistence(auth, browserLocalPersistence);
-                // Önce Popup dene, başarısız olursa Redirect'e geçecek
-                await signInWithPopup(auth, provider);
-            } catch (error) {
-                console.error("Login Hatası:", error);
-                // Timeout veya Popup bloklanma durumunda Redirect (Yönlendirme) yöntemini dene
-                if (error.code === 'auth/popup-blocked' || error.code === 'auth/network-request-failed' || error.code === 'auth/internal-error') {
-                    showNotification("Yönlendirme moduna geçiliyor...", "info");
-                    await signInWithRedirect(auth, provider);
-                } else {
-                    showNotification("Giriş başarısız: " + error.message, "error");
-                    btn.disabled = false;
-                    btn.innerHTML = `Google ile Giriş Yap`;
-                }
+                const res = await signInWithPopup(auth, provider);
+            } catch (err) {
+                console.error(err);
+                showAuthError("Google bağlantısı başarısız. Lütfen tekrar deneyin veya e-posta kullanın.");
             }
         };
+
+        window.handleEmailLogin = async () => {
+            const email = document.getElementById('email-input').value;
+            const pass = document.getElementById('password-input').value;
+            if(!email || !pass) return showAuthError("Lütfen alanları doldurun.");
+            try {
+                await signInWithEmailAndPassword(auth, email, pass);
+            } catch (err) {
+                showAuthError("Giriş yapılamadı: " + translateError(err.code));
+            }
+        };
+
+        window.handleEmailSignUp = async () => {
+            const email = document.getElementById('email-input').value;
+            const pass = document.getElementById('password-input').value;
+            if(!email || pass.length < 6) return showAuthError("E-posta geçerli, şifre en az 6 karakter olmalıdır.");
+            try {
+                await createUserWithEmailAndPassword(auth, email, pass);
+            } catch (err) {
+                showAuthError("Kayıt olunamadı: " + translateError(err.code));
+            }
+        };
+
+        function translateError(code) {
+            switch(code) {
+                case 'auth/invalid-credential': return "Hatalı e-posta veya şifre.";
+                case 'auth/email-already-in-use': return "Bu e-posta zaten kullanımda.";
+                case 'auth/weak-password': return "Şifre çok zayıf.";
+                default: return "Bir hata oluştu.";
+            }
+        }
+
+        function showAuthError(msg) {
+            const err = document.getElementById('auth-error');
+            err.innerText = msg;
+            err.classList.remove('hidden');
+        }
 
         window.logout = () => signOut(auth);
 
-        // Yönlendirme sonrası sonucu kontrol et
-        getRedirectResult(auth).catch((error) => {
-            if(error) showNotification("Yönlendirme hatası: " + error.message, "error");
-        });
-
         onAuthStateChanged(auth, (user) => {
-            const authScreen = document.getElementById('auth-screen');
-            const mainApp = document.getElementById('main-app');
             if (user) {
-                window.currentUser = user;
-                authScreen.classList.add('hidden');
-                mainApp.classList.remove('hidden');
-                document.getElementById('user-name').innerText = user.displayName;
-                document.getElementById('user-email').innerText = user.email;
-                loadUserData();
+                currentUser = user;
+                document.getElementById('auth-screen').classList.add('hidden');
+                document.getElementById('app-content').classList.remove('hidden');
+                document.getElementById('user-name').innerText = user.displayName || user.email.split('@')[0];
+                document.getElementById('user-avatar').innerText = (user.displayName || user.email).charAt(0);
+                loadData();
             } else {
-                window.currentUser = null;
-                authScreen.classList.remove('hidden');
-                mainApp.classList.add('hidden');
+                document.getElementById('auth-screen').classList.remove('hidden');
+                document.getElementById('app-content').classList.add('hidden');
             }
         });
 
-        async function loadUserData() {
-            if (!window.currentUser) return;
-            const q = query(collection(db, `users/${window.currentUser.uid}/outcomes`), orderBy("createdAt", "desc"));
+        // Veri Yükleme
+        function loadData() {
+            const q = query(
+                collection(db, "outcomes"), 
+                where("userId", "==", currentUser.uid)
+            );
+            
             onSnapshot(q, (snapshot) => {
-                window.state.outcomes = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                userOutcomes = [];
+                snapshot.forEach(doc => userOutcomes.push({ id: doc.id, ...doc.data() }));
                 renderOutcomes();
-                updateDashboardStats();
             });
         }
 
-        window.addOutcome = async (e) => {
-            e.preventDefault();
-            const lesson = document.getElementById('outcome-lesson').value;
-            const content = document.getElementById('outcome-content').value;
-            if(!content || !window.currentUser) return;
-            try {
-                await addDoc(collection(db, `users/${window.currentUser.uid}/outcomes`), {
-                    lesson, content, completed: false, createdAt: new Date().toISOString()
-                });
-                document.getElementById('outcome-content').value = "";
-                showNotification("Kazanım eklendi.");
-            } catch (err) { showNotification("Hata: " + err.message, "error"); }
-        };
-
-        window.toggleOutcome = async (id, currentStatus) => {
-            const docRef = doc(db, `users/${window.currentUser.uid}/outcomes`, id);
-            await updateDoc(docRef, { completed: !currentStatus });
+        window.addOutcome = async () => {
+            const subject = document.getElementById('outcome-subject').value;
+            const text = document.getElementById('outcome-text').value;
+            if (!text) return;
+            
+            await addDoc(collection(db, "outcomes"), {
+                userId: currentUser.uid,
+                subject,
+                text,
+                status: 'eksik',
+                createdAt: Date.now()
+            });
+            document.getElementById('outcome-text').value = '';
         };
 
         window.deleteOutcome = async (id) => {
-            await deleteDoc(doc(db, `users/${window.currentUser.uid}/outcomes`, id));
-            showNotification("Kazanım silindi.");
+            await deleteDoc(doc(db, "outcomes", id));
         };
 
-        window.switchTab = (tabId) => {
-            window.state.activeTab = tabId;
-            document.querySelectorAll('.page-section').forEach(s => s.classList.add('hidden'));
-            document.getElementById(`section-${tabId}`).classList.remove('hidden');
-            document.querySelectorAll('.sidebar-item').forEach(item => item.classList.toggle('active', item.dataset.tab === tabId));
-            if (window.lucide) window.lucide.createIcons();
-        };
-
-        window.updateTimerUI = () => {
-            const t = window.state.timer;
-            document.getElementById('timer-display').innerText = `${String(t.minutes).padStart(2, '0')}:${String(t.seconds).padStart(2, '0')}`;
-            document.getElementById('timer-btn-text').innerText = t.isRunning ? 'Durdur' : 'Başlat';
-        };
-
-        window.toggleTimer = () => {
-            const t = window.state.timer;
-            if (t.isRunning) { clearInterval(t.interval); t.isRunning = false; }
-            else {
-                t.isRunning = true;
-                t.interval = setInterval(() => {
-                    if (t.seconds === 0) {
-                        if (t.minutes === 0) { clearInterval(t.interval); t.isRunning = false; showNotification("Süre doldu!"); }
-                        else { t.minutes--; t.seconds = 59; }
-                    } else { t.seconds--; }
-                    window.updateTimerUI();
-                }, 1000);
-            }
-            window.updateTimerUI();
-        };
-
-        window.resetTimer = () => {
-            clearInterval(window.state.timer.interval);
-            window.state.timer = { minutes: 25, seconds: 0, isRunning: false, interval: null };
-            window.updateTimerUI();
+        window.toggleOutcomeStatus = async (id, currentStatus) => {
+            const nextStatus = currentStatus === 'eksik' ? 'tamamlandi' : 'eksik';
+            await updateDoc(doc(db, "outcomes", id), { status: nextStatus });
         };
 
         function renderOutcomes() {
-            const list = document.getElementById('outcomes-list');
-            if(!list) return;
-            if (!window.state.outcomes.length) {
-                list.innerHTML = `<div class="text-center py-12 bg-white rounded-3xl border-2 border-dashed border-slate-100"><p class="text-slate-400 font-medium">Henüz bir kazanım yok.</p></div>`;
-                return;
-            }
-            list.innerHTML = window.state.outcomes.map(o => `
-                <div class="flex items-center justify-between p-5 bg-white border border-slate-100 rounded-2xl mb-4 shadow-sm hover:shadow-md transition-all group">
-                    <div class="flex items-center gap-4 flex-1">
-                        <input type="checkbox" ${o.completed ? 'checked' : ''} onchange="toggleOutcome('${o.id}', ${o.completed})" class="w-6 h-6 rounded-lg border-2 border-slate-200 text-indigo-600 cursor-pointer">
-                        <div>
-                            <span class="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-600 uppercase mb-1">${o.lesson}</span>
-                            <p class="${o.completed ? 'line-through text-slate-400' : 'text-slate-700'} font-semibold">${o.content}</p>
+            const container = document.getElementById('outcomes-list');
+            container.innerHTML = '';
+            
+            userOutcomes.sort((a, b) => b.createdAt - a.createdAt).forEach(item => {
+                const isDone = item.status === 'tamamlandi';
+                const card = `
+                    <div class="glass p-5 rounded-2xl border-l-4 ${isDone ? 'border-green-500 opacity-60' : 'border-indigo-500'} transition-all">
+                        <div class="flex justify-between items-start mb-2">
+                            <span class="text-xs font-bold px-2 py-1 bg-slate-100 rounded-md text-slate-600">${item.subject}</span>
+                            <button onclick="deleteOutcome('${item.id}')" class="text-slate-300 hover:text-red-500">✕</button>
                         </div>
+                        <p class="text-slate-700 font-medium mb-4 ${isDone ? 'line-through' : ''}">${item.text}</p>
+                        <button onclick="toggleOutcomeStatus('${item.id}', '${item.status}')" class="w-full py-2 rounded-lg text-sm font-semibold ${isDone ? 'bg-green-50 text-green-600' : 'bg-indigo-50 text-indigo-600'} hover:opacity-80">
+                            ${isDone ? '✓ Tamamlandı' : 'Tamamla'}
+                        </button>
                     </div>
-                    <button onclick="deleteOutcome('${o.id}')" class="text-slate-300 hover:text-red-500 p-2 opacity-0 group-hover:opacity-100 transition-all">
-                        <i data-lucide="trash-2" class="w-5 h-5"></i>
-                    </button>
-                </div>
-            `).join('');
-            if (window.lucide) window.lucide.createIcons();
+                `;
+                container.innerHTML += card;
+            });
         }
 
-        function updateDashboardStats() {
-            const total = window.state.outcomes.length;
-            const completed = window.state.outcomes.filter(o => o.completed).length;
-            const percent = total === 0 ? 0 : Math.round((completed / total) * 100);
-            document.getElementById('stat-total').innerText = total;
-            document.getElementById('stat-percent').innerText = `%${percent}`;
-            document.getElementById('progress-bar-fill').style.width = `${percent}%`;
-        }
-
-        window.downloadPDF = () => {
+        // PDF İndirme (UTF-8 Font Desteği için Standard Fontlar Kullanılır)
+        window.downloadOutcomesPDF = () => {
             const { jsPDF } = window.jspdf;
             const doc = new jsPDF();
-            const missing = window.state.outcomes.filter(o => !o.completed);
-            if (!missing.length) return showNotification("Eksik kazanım yok!", "info");
-            doc.text("EduPlan Eksik Kazanımlar Raporu", 14, 25);
+            
+            // Başlık
+            doc.setFontSize(20);
+            doc.text("EduPlan - Eksik Kazanim Listesi", 14, 22);
+            
+            const rows = userOutcomes
+                .filter(i => i.status === 'eksik')
+                .map(i => [i.subject, i.text]);
+
             doc.autoTable({
-                startY: 35,
-                head: [['Ders', 'Kazanım Detayı']],
-                body: missing.map(o => [o.lesson, o.content]),
-                headStyles: { fillColor: [79, 70, 229] }
+                startY: 30,
+                head: [['Ders', 'Kazanim']],
+                body: rows,
+                theme: 'striped',
+                styles: { font: "helvetica", fontSize: 10 },
+                headStyles: { fillColor: [99, 102, 241] }
             });
-            doc.save(`Eksik_Kazanımlar_${new Date().toLocaleDateString()}.pdf`);
+
+            doc.save("EduPlan_Eksik_Kazanımlar.pdf");
         };
 
-        function showNotification(msg, type = 'success') {
-            const toast = document.createElement('div');
-            toast.className = `fixed bottom-6 right-6 px-6 py-4 rounded-2xl shadow-2xl text-white z-[100] flex items-center gap-3 transition-all duration-500 ${type === 'success' ? 'bg-indigo-600' : type === 'info' ? 'bg-blue-500' : 'bg-red-500'}`;
-            toast.innerHTML = `<span class="font-bold">${msg}</span>`;
-            document.body.appendChild(toast);
-            setTimeout(() => { toast.classList.add('opacity-0'); setTimeout(() => toast.remove(), 500); }, 3000);
+        // Navigation
+        window.showPage = (page) => {
+            document.querySelectorAll('.page-section').forEach(s => s.classList.add('hidden'));
+            document.getElementById(`page-${page}`).classList.remove('hidden');
+            
+            // Sidebar aktif link rengi
+            document.querySelectorAll('aside nav button').forEach(b => {
+                b.classList.remove('text-indigo-600', 'bg-indigo-50');
+                b.classList.add('text-slate-600');
+            });
+            event.currentTarget.classList.add('text-indigo-600', 'bg-indigo-50');
+        };
+
+        // Timer
+        let timer;
+        let timeLeft = 25 * 60;
+        let isRunning = false;
+
+        window.toggleTimer = () => {
+            const btn = document.getElementById('timer-btn');
+            if (isRunning) {
+                clearInterval(timer);
+                btn.innerText = "Başlat";
+                btn.classList.replace('bg-red-500', 'bg-indigo-600');
+            } else {
+                timer = setInterval(() => {
+                    timeLeft--;
+                    updateTimerDisplay();
+                    if (timeLeft <= 0) {
+                        clearInterval(timer);
+                        alert("Süre bitti! Harika iş çıkardın.");
+                        resetTimer();
+                    }
+                }, 1000);
+                btn.innerText = "Durdur";
+                btn.classList.replace('bg-indigo-600', 'bg-red-500');
+            }
+            isRunning = !isRunning;
+        };
+
+        window.resetTimer = () => {
+            clearInterval(timer);
+            isRunning = false;
+            timeLeft = 25 * 60;
+            updateTimerDisplay();
+            const btn = document.getElementById('timer-btn');
+            btn.innerText = "Başlat";
+            btn.classList.remove('bg-red-500');
+            btn.classList.add('bg-indigo-600');
+        };
+
+        function updateTimerDisplay() {
+            const m = Math.floor(timeLeft / 60);
+            const s = timeLeft % 60;
+            document.getElementById('timer-display').innerText = `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
         }
 
-        window.addEventListener('load', () => { if (window.lucide) window.lucide.createIcons(); window.updateTimerUI(); });
+        // Haftalık Program Oluşturucu
+        function initSchedule() {
+            const tbody = document.getElementById('schedule-body');
+            const hours = ["09:00", "10:00", "11:00", "12:00", "13:00", "14:00", "15:00"];
+            hours.forEach(hour => {
+                let row = `<tr class="border-b border-slate-100">
+                    <td class="p-4 font-semibold text-slate-400 text-sm">${hour}</td>
+                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
+                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
+                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
+                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
+                    <td class="p-4"><input class="w-full bg-transparent outline-none text-sm" placeholder="..."></td>
+                </tr>`;
+                tbody.innerHTML += row;
+            });
+        }
+        initSchedule();
+
     </script>
-
-    <div id="auth-screen" class="flex items-center justify-center min-h-screen p-6 bg-slate-50">
-        <div class="max-w-md w-full glass-card p-12 rounded-[3rem] shadow-2xl text-center">
-            <div class="w-24 h-24 mx-auto mb-8 bg-gradient-to-br from-indigo-600 to-blue-700 rounded-[2rem] flex items-center justify-center shadow-xl">
-                <i data-lucide="graduation-cap" class="w-12 h-12 text-white"></i>
-            </div>
-            <h1 class="text-4xl font-black text-slate-800 mb-2">Edu<span class="text-indigo-600">Plan</span></h1>
-            <p class="text-slate-500 mb-10">Lütfen Google ile giriş yapın.</p>
-            <button id="login-btn" onclick="login()" class="w-full flex items-center justify-center gap-4 bg-white border-2 border-slate-100 p-5 rounded-2xl hover:border-indigo-200 transition-all font-bold">
-                <svg class="w-6 h-6" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3c-1.6 4.7-6.1 8-11.3 8-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"></path><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 8 3l5.7-5.7C34 6.1 29.3 4 24 4c-7.7 0-14.3 4.3-17.7 10.7z"></path><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2c-2.1 1.5-4.6 2.4-7.2 2.4-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"></path><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"></path></svg>
-                Google ile Giriş Yap
-            </button>
-        </div>
-    </div>
-
-    <div id="main-app" class="hidden flex flex-col lg:flex-row min-h-screen">
-        <aside class="w-full lg:w-80 bg-white border-r border-slate-100 flex flex-col h-screen sticky top-0">
-            <div class="p-10 flex items-center gap-4">
-                <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white"><i data-lucide="graduation-cap"></i></div>
-                <span class="font-black text-2xl">Edu<span class="text-indigo-600">Plan</span></span>
-            </div>
-            <nav class="flex-1 px-6 space-y-2">
-                <button onclick="switchTab('dashboard')" data-tab="dashboard" class="sidebar-item active w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold"><i data-lucide="layout-dashboard"></i> Genel Bakış</button>
-                <button onclick="switchTab('outcomes')" data-tab="outcomes" class="sidebar-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold"><i data-lucide="list-checks"></i> Kazanımlar</button>
-                <button onclick="switchTab('timer')" data-tab="timer" class="sidebar-item w-full flex items-center gap-4 px-6 py-4 rounded-2xl font-bold"><i data-lucide="clock"></i> Pomodoro</button>
-            </nav>
-            <div class="p-8 border-t">
-                <p id="user-name" class="text-sm font-black truncate"></p>
-                <button onclick="logout()" class="w-full mt-4 py-3 text-red-500 hover:bg-red-50 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2">
-                    <i data-lucide="log-out" class="w-4 h-4"></i> Çıkış
-                </button>
-            </div>
-        </aside>
-
-        <main class="flex-1 p-8 lg:p-14 max-w-6xl mx-auto w-full">
-            <section id="section-dashboard" class="page-section space-y-10">
-                <h2 class="text-4xl font-black text-slate-800">Hoş Geldin! 👋</h2>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div class="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Toplam Kazanım</p>
-                        <p id="stat-total" class="text-6xl font-black">0</p>
-                    </div>
-                    <div class="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                        <p class="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Başarı Oranı</p>
-                        <p id="stat-percent" class="text-6xl font-black text-emerald-500">%0</p>
-                    </div>
-                </div>
-                <div class="bg-white p-10 rounded-[2.5rem] border border-slate-100 shadow-sm">
-                    <div class="flex justify-between mb-4"><h3 class="font-bold">İlerleme Durumu</h3></div>
-                    <div class="w-full bg-slate-100 h-4 rounded-full overflow-hidden">
-                        <div id="progress-bar-fill" class="bg-indigo-600 h-full w-0 transition-all duration-1000"></div>
-                    </div>
-                </div>
-            </section>
-
-            <section id="section-outcomes" class="page-section hidden space-y-8">
-                <div class="flex justify-between items-center">
-                    <h2 class="text-4xl font-black text-slate-800">Kazanım Takibi</h2>
-                    <button onclick="downloadPDF()" class="bg-slate-900 text-white px-6 py-3 rounded-xl font-bold flex items-center gap-2">
-                        <i data-lucide="file-down"></i> PDF İndir
-                    </button>
-                </div>
-                <form onsubmit="addOutcome(event)" class="bg-white p-6 rounded-[2rem] border border-slate-100 shadow-sm flex flex-col md:flex-row gap-4">
-                    <select id="outcome-lesson" class="bg-slate-50 p-4 rounded-xl font-bold border-none ring-1 ring-slate-200 outline-none">
-                        <option>Matematik</option><option>Türkçe</option><option>Fen</option><option>Sosyal</option><option>İngilizce</option>
-                    </select>
-                    <input id="outcome-content" type="text" placeholder="Kazanım açıklaması..." class="flex-1 bg-slate-50 p-4 rounded-xl font-bold border-none ring-1 ring-slate-200 outline-none">
-                    <button type="submit" class="bg-indigo-600 text-white px-8 py-4 rounded-xl font-bold hover:bg-indigo-700 transition-all">Ekle</button>
-                </form>
-                <div id="outcomes-list"></div>
-            </section>
-
-            <section id="section-timer" class="page-section hidden text-center space-y-12 py-10">
-                <h2 class="text-5xl font-black text-slate-800">Odaklanma</h2>
-                <div class="w-72 h-72 mx-auto rounded-full border-[12px] border-indigo-50 bg-white shadow-2xl flex flex-col items-center justify-center">
-                    <div id="timer-display" class="text-6xl font-black text-indigo-600">25:00</div>
-                </div>
-                <div class="flex justify-center gap-6">
-                    <button onclick="toggleTimer()" class="bg-indigo-600 text-white px-12 py-5 rounded-2xl font-black shadow-lg"><span id="timer-btn-text">Başlat</span></button>
-                    <button onclick="resetTimer()" class="bg-white border-2 border-slate-100 px-10 py-5 rounded-2xl font-black text-slate-400">Sıfırla</button>
-                </div>
-            </section>
-        </main>
-    </div>
 </body>
 </html>
+
+```
